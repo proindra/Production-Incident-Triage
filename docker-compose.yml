@@ -1,0 +1,77 @@
+
+name: incident-runbook-triage
+
+services:
+  irt-postgres:
+    image: postgres:17
+    container_name: irt-postgres
+    environment:
+      POSTGRES_DB: incidentdb
+      POSTGRES_USER: incident_user
+      POSTGRES_PASSWORD: local_dev_password
+    ports:
+      - "2026:5432"
+    volumes:
+      - irt-postgres-data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "wal_level=logical"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U incident_user -d incidentdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - irt-network
+
+  irt-prometheus:
+    image: prom/prometheus
+    container_name: irt-prometheus
+    ports:
+      - "2027:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - irt-prometheus-data:/prometheus
+    depends_on:
+      irt-postgres-exporter:
+        condition: service_started
+    networks:
+      - irt-network
+
+  irt-grafana:
+    image: grafana/grafana
+    container_name: irt-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: local_grafana_password
+    ports:
+      - "2028:3000"
+    volumes:
+      - irt-grafana-data:/var/lib/grafana
+    depends_on:
+      - irt-prometheus
+    networks:
+      - irt-network
+
+  irt-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: irt-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://incident_user:local_dev_password@irt-postgres:5432/incidentdb?sslmode=disable"
+    ports:
+      - "2029:9187"
+    depends_on:
+      irt-postgres:
+        condition: service_healthy
+    networks:
+      - irt-network
+
+networks:
+  irt-network:
+    name: irt-network
+
+volumes:
+  irt-postgres-data:
+    name: irt-postgres-data
+  irt-prometheus-data:
+    name: irt-prometheus-data
+  irt-grafana-data:
+    name: irt-grafana-data
