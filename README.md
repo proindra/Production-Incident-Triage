@@ -2,6 +2,48 @@
 
 This project is a safe, advisory-only assistant for investigating PostgreSQL incidents using the project runbooks.
 
+## Project structure
+
+```text
+.
+├── IMPLEMENTATION.md
+├── README.md
+├── docker-compose.yml
+├── prometheus.yml
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── corpus/
+│   └── runbooks/
+│       ├── high_database_latency.md
+│       ├── too_many_connections.md
+│       └── disk_usage_wal_retention.md
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── schemas.py
+│   ├── policies.py
+│   ├── triage.py
+│   ├── retrieval.py
+│   ├── diagnostics/
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── mock.py
+│   │   └── postgres_readonly.py
+│   └── storage/
+│       ├── __init__.py
+│       └── incidents.py
+├── tests/
+│   ├── test_health.py
+│   ├── test_policies.py
+│   ├── test_latency.py
+│   ├── test_connections.py
+│   └── test_wal_retention.py
+└── docs/
+    └── evaluation.md
+```
+
 ## Implementation progress
 
 - [x] Step 1 — Create the project structure and place the existing runbooks and configuration files in their expected locations.
