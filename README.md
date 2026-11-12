@@ -153,17 +153,22 @@ metadata, rejected-request records, and feedback; Redis/RQ tracks job status
 and results. Model tool selection is limited to four rounds and eight total
 tool calls per run.
 
-## Run with Docker Compose
+## Getting started
 
-Requirements: Docker Compose. Compose builds and starts the API, Redis task
-queue, scalable agent worker, local model stub, PostgreSQL diagnostic target,
-exporters, Prometheus, Grafana, cAdvisor, and Jaeger. The API and worker run in
-containers; deterministic mock diagnostics are used unless `DATABASE_URL` is
-configured.
+Requirements: Git, Docker, and Docker Compose. Clone the repository and start
+the services:
 
 ```powershell
+git clone https://github.com/proindra/Production-Incident-Triage.git
+Set-Location Production-Incident-Triage
 docker compose up --build
 ```
+
+The default setup needs no `.env` file, Groq key, or live database URL. It uses
+deterministic triage and mock diagnostics; RAG and model-selected tools are
+disabled until configured. Compose starts the API, Redis/RQ, worker, local model
+stub, PostgreSQL diagnostic target, exporters, Prometheus, Grafana, cAdvisor,
+and Jaeger.
 
 Open the UI at <http://127.0.0.1:8000/> or the API docs at
 <http://127.0.0.1:8000/docs>. `GET /health` checks that the API process is
