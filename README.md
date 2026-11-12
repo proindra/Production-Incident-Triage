@@ -9,6 +9,8 @@
   <img src="https://img.shields.io/badge/Language-Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/Agents-LangGraph-1C3C3C?style=for-the-badge" alt="LangGraph">
   <img src="https://img.shields.io/badge/RAG-FAISS-00599C?style=for-the-badge" alt="FAISS">
+  <img src="https://img.shields.io/badge/Embeddings-FastEmbed-3B82F6?style=for-the-badge" alt="FastEmbed">
+  <img src="https://img.shields.io/badge/Models-Hugging%20Face%20compatible-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face-compatible models">
   <img src="https://img.shields.io/badge/LLM-Groq%20optional-F55036?style=for-the-badge" alt="Optional Groq">
   <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
   <img src="https://img.shields.io/badge/Queue-Redis%20%2F%20RQ-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis and RQ">
