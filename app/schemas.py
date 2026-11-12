@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+IncidentCategory = Literal[
+    "high_database_latency",
+    "too_many_connections",
+    "disk_usage_wal_retention",
+    "unknown",
+]
+SeverityLevel = Literal["low", "medium", "high", "critical"]
 
 
 class HealthResponse(BaseModel):
@@ -19,8 +29,16 @@ class TriageRequest(BaseModel):
     )
     context: dict[str, Any] | None = Field(
         default=None,
+        max_length=100,
         description="Optional diagnostic observations or other incident context.",
     )
+
+    @field_validator("context")
+    @classmethod
+    def context_size_is_bounded(cls, context: dict[str, Any] | None) -> dict[str, Any] | None:
+        if context is not None and len(json.dumps(context, default=str)) > 10_000:
+            raise ValueError("context must be at most 10,000 characters when serialized")
+        return context
 
 
 class RunbookReference(BaseModel):
@@ -33,10 +51,11 @@ class RunbookReference(BaseModel):
 
 
 class TriageResponse(BaseModel):
-    category: str = Field(description="Incident category, or undetermined if unknown.")
-    severity: str = Field(
-        description="Severity assigned according to the centralized safety policy."
+    incident_id: str | None = Field(
+        default=None, description="Stored incident history identifier, when persistence succeeds."
     )
+    category: IncidentCategory = Field(description="Incident category, or unknown if undetermined.")
+    severity: SeverityLevel = Field(description="Severity assigned according to the centralized safety policy.")
     confidence: float = Field(ge=0, le=1)
     evidence_observed: list[str] = Field(
         description="Facts directly present in the input or returned by executed checks."

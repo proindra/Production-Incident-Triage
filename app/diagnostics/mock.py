@@ -1,13 +1,25 @@
-"""Mock diagnostic adapter placeholder."""
+"""Deterministic diagnostic adapter; it never invents measurements."""
 
 from __future__ import annotations
 
-from .base import BaseDiagnostic
+from copy import deepcopy
+from typing import Any
+
+from .base import DiagnosticSnapshot
 
 
-class MockDiagnostic(BaseDiagnostic):
-    """Deterministic sample incident data for tests."""
+class MockDiagnostic:
+    """Return only explicitly configured fixtures, for demos and tests."""
 
-    def collect(self):
-        """Return mock diagnostic data."""
-        return {}
+    def __init__(self, fixtures: dict[str, dict[str, Any]] | None = None) -> None:
+        self._fixtures = fixtures or {}
+
+    def collect(self, category: str) -> DiagnosticSnapshot:
+        fixture = deepcopy(self._fixtures.get(category, {}))
+        checks = fixture.pop("_checks_performed", [])
+        unavailable = fixture.pop("_unavailable", [])
+        return DiagnosticSnapshot(
+            evidence=fixture,
+            checks_performed=list(checks),
+            unavailable=list(unavailable),
+        )
