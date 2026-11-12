@@ -12,7 +12,8 @@ This project is a safe, advisory-only assistant for investigating PostgreSQL inc
 ├── prometheus.yml
 ├── .env.example
 ├── .gitignore
-├── requirements.txt
+├── pyproject.toml
+├── uv.lock
 ├── corpus/
 │   └── runbooks/
 │       ├── high_database_latency.md
@@ -44,11 +45,27 @@ This project is a safe, advisory-only assistant for investigating PostgreSQL inc
     └── evaluation.md
 ```
 
+## Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for Python dependency
+and virtual-environment management. Python 3.11 or newer is required.
+From the project root, sync the environment and run the test suite:
+
+```powershell
+uv sync
+uv run pytest
+```
+
+Run Python commands inside the project environment with `uv run`, for
+example `uv run python --version`. To add a runtime dependency, use
+`uv add <package>`; for a development dependency, use
+`uv add --dev <package>`. Commit `uv.lock` so installs can be reproduced.
+
 ## Implementation progress
 
 - [x] Step 1 — Create the project structure and place the existing runbooks and configuration files in their expected locations.
 - [ ] Step 2 — Validate the user-provided files and review the Docker Compose and Prometheus configuration.
-- [ ] Step 3 — Set up the Python environment and dependencies.
+- [x] Step 3 — Set up the Python environment and dependencies with uv.
 - [ ] Step 4 — Define API schemas and implement the health endpoint.
 - [ ] Step 5 — Centralize severity and safety policies.
 - [ ] Step 6 — Build diagnostic adapters.
@@ -62,4 +79,4 @@ This project is a safe, advisory-only assistant for investigating PostgreSQL inc
 - [ ] Step 14 — Complete the security and reliability review.
 - [ ] Step 15 — Complete the demo checklist.
 
-Step 1 is complete. The project skeleton and user-provided files are in place; later implementation steps have not been started.
+Steps 1 and 3 are complete. Step 2's Compose configuration validation passed, but the Docker stack has not yet been confirmed running. Application implementation steps remain.

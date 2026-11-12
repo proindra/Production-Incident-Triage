@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-psycopg[binary]
-httpx
-pytest

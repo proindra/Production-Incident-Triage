@@ -34,7 +34,8 @@ incident-runbook-triage/
 ├── .env.example
 ├── .gitignore
 ├── README.md
-├── requirements.txt
+├── pyproject.toml
+├── uv.lock
 ├── corpus/
 │   └── runbooks/
 │       ├── high_database_latency.md
@@ -170,30 +171,28 @@ examples for local development and should not be used in production.
 
 ## Step 3 --- Set up Python
 
-Create a virtual environment:
+Use `uv` to manage the project environment and dependencies. The runtime
+dependencies and `pytest` development dependency are declared in
+`pyproject.toml`. Run `uv sync` to create `.venv`, resolve dependencies,
+and generate `uv.lock`; commit the lock file so environments can
+reproduce the resolved versions:
 
-``` powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```powershell
+uv sync
+uv run pytest
 ```
 
-Add suitable dependencies to `requirements.txt`, initially including:
+Use `uv add <package>` for runtime dependencies and
+`uv add --dev <package>` for development dependencies added later.
+After the lock file has been generated and committed, use
+`uv sync --locked` to ensure it has not changed unexpectedly.
 
-``` text
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-psycopg[binary]
-httpx
-pytest
-```
+Do not maintain a separate `requirements.txt`; `pyproject.toml` and
+`uv.lock` are the dependency and lock-file sources. Add
+retrieval/vector-store dependencies only when implementing retrieval.
 
-Add retrieval/vector-store dependencies only when implementing
-retrieval. Pin tested versions before final submission. Do not place
-secrets directly in source code; use environment variables and provide
-only safe examples in `.env.example`.
+Do not place secrets directly in source code; use environment variables
+and provide only safe examples in `.env.example`.
 
 ## Step 4 --- Define API schemas and health endpoint
 
