@@ -35,6 +35,7 @@
 │   ├── services/                            # triage, agents, retrieval, service ports
 │   ├── infrastructure/
 │   │   ├── diagnostics/                     # mock and read-only PostgreSQL adapters
+│   │   ├── llm/                              # provider resilience and local model stub
 │   │   ├── queue/                           # Redis/RQ queue and worker
 │   │   ├── rag/                             # Groq, ingestion, and FAISS adapters
 │   │   └── storage/                         # SQLite incident history
@@ -64,7 +65,7 @@ The original project brief is preserved in
 flowchart TD
     User[Browser or API client] --> API[FastAPI API]
     API --> Valid{Request valid?}
-    Valid -- No --> Quarantine[Save rejected request]
+    Valid -- No --> Quarantine[Quarantine with field errors]
     Quarantine --> SQLite[(SQLite history)]
     Quarantine --> Rejected[HTTP 422 with quarantine ID]
     Rejected --> User
@@ -75,23 +76,41 @@ flowchart TD
     Queue --> Redis[(Redis and RQ)]
     Redis --> Worker[Background worker]
 
-    Worker --> Agent[LangGraph triage agent]
-    Agent --> Diagnostics[Diagnostics: mock by default<br/>read-only PostgreSQL optional]
-    Agent --> RAGMode{RAG enabled?}
-    Runbooks[(corpus/runbooks)] --> Keyword[Keyword retrieval]
+    Worker --> Triage[LangGraph triage agent<br/>classify and gather evidence]
+    Triage --> ToolMode{Model tool selection enabled?}
+    ToolMode -- Yes --> ToolModel[Groq tool-calling model]
+    ToolModel -- Tool call --> ModelTools[Bounded tools<br/>request fields, corpus search,<br/>clause lookup]
+    ModelTools -- Tool result --> ToolModel
+    ToolModel -- Done or budget reached --> Evidence[Retrieved evidence]
+    ToolMode -- No or model unavailable --> LocalTools[Deterministic tool flow<br/>uses the same three tools]
+    LocalTools --> Evidence
+
+    ModelTools -. corpus search .-> RAGMode{RAG enabled?}
+    LocalTools -. corpus search .-> RAGMode
+    Runbooks[(Three project runbooks)] --> Keyword[Keyword retrieval]
     RAGMode -- No --> Keyword
-    Runbooks -. offline ingestion .-> FAISS[(FAISS index)]
+    Runbooks -. offline indexing .-> Indexing[Chunk and embed]
+    PostgresDocs[(Selected PostgreSQL 17 docs)] -. offline indexing .-> Indexing
+    Indexing --> FAISS[(Persistent FAISS index)]
     RAGMode -- Yes --> Semantic[FAISS semantic retrieval]
     FAISS --> Semantic
-    Diagnostics --> Policy[Deterministic severity, routing,<br/>and recommended actions]
-    Keyword --> Policy
-    Semantic --> Policy
-    Semantic --> Groq[Optional Groq summary<br/>grounded in retrieved passages]
-    Policy --> Verify[LangGraph citation verifier]
+    Keyword --> Evidence
+    Semantic --> Evidence
+    Triage --> DiagnosticMode{DATABASE_URL configured?}
+    DiagnosticMode -- No --> MockDiagnostics[Mock adapter<br/>no live checks]
+    DiagnosticMode -- Yes --> ReadOnlyDiagnostics[Read-only PostgreSQL checks]
+    ReadOnlyDiagnostics --> Postgres[(PostgreSQL diagnostic target)]
+    MockDiagnostics --> Policy[Deterministic severity,<br/>routing, and recommendations]
+    ReadOnlyDiagnostics --> Policy
+    Evidence --> Policy
+
+    Policy --> SummaryMode{RAG summary available?}
+    SummaryMode -- Yes --> Groq[Grounded Groq summary<br/>versioned prompt]
+    SummaryMode -- No --> Verify[Separate LangGraph<br/>verification agent]
     Groq --> Verify
-    Verify -- Citation check failed --> Retry[Alternate search<br/>one retry maximum]
-    Retry --> Verify
-    Verify -- Verified or retry exhausted --> Result[Verified result or human escalation]
+    Verify -- Verification fails --> Retry[Alternate retrieval<br/>one retry maximum]
+    Retry --> Policy
+    Verify -- Verified or retry exhausted --> Result[Verified result or<br/>human escalation]
     Result --> SQLite
     Result --> Redis
 
@@ -104,23 +123,35 @@ flowchart TD
     Feedback --> API
     API --> SQLite
 
-    API -. metrics .-> Prometheus[Prometheus]
+    API -. service and index metrics .-> Prometheus[Prometheus]
+    Redis --> RedisExporter[Redis exporter]
+    RedisExporter -. queue metrics .-> Prometheus
+    Postgres --> PostgresExporter[PostgreSQL exporter]
+    PostgresExporter -. database metrics .-> Prometheus
+    DockerHost[Docker host containers] --> CAdvisor[cAdvisor]
+    CAdvisor -. resource metrics .-> Prometheus
+    Prometheus --> Grafana[Grafana dashboard]
     API -. traces .-> Jaeger[Jaeger]
     Worker -. traces .-> Jaeger
 ```
 
-Valid requests are processed asynchronously; the API returns a run ID while a
-worker gathers evidence and verifies citations. RAG and Groq are optional:
-severity, routing, and recommended actions remain deterministic. SQLite keeps
-incident metadata, rejected-request records, and feedback; Redis/RQ tracks job
-status and results.
+Valid requests are processed asynchronously; the API returns a run ID while
+the triage agent gathers evidence and hands the result to a separate
+verification agent. Tool selection can be model-driven or use the bounded
+deterministic flow. RAG and Groq summaries are optional; severity, routing, and
+recommended actions remain deterministic. Failed verification triggers one
+alternate search, then escalation instead of an unsupported answer. SQLite
+keeps incident metadata, rejected-request records, and feedback; Redis/RQ
+tracks job status and results. Model tool selection is limited to four rounds
+and eight total tool calls per run.
 
 ## Run with Docker Compose
 
 Requirements: Docker Compose. Compose builds and starts the API, Redis task
-queue, scalable agent worker, PostgreSQL diagnostic target, Prometheus, Grafana,
-and Jaeger. The API and worker run in containers; deterministic mock
-diagnostics are used unless `DATABASE_URL` is configured.
+queue, scalable agent worker, local model stub, PostgreSQL diagnostic target,
+exporters, Prometheus, Grafana, cAdvisor, and Jaeger. The API and worker run in
+containers; deterministic mock diagnostics are used unless `DATABASE_URL` is
+configured.
 
 ```powershell
 docker compose up --build
@@ -229,10 +260,15 @@ service is deterministic and does not contact Groq.
 
 ### RAG prompt evaluation
 
-With the selected PostgreSQL docs indexed and Groq settings configured, compare
-the versioned summary prompts on the fixed 20-case dataset:
+The evaluator runs on the host and uses the local `data/postgresql` and
+`data/faiss` paths; the Compose index is stored in a separate named volume.
+Export `GROQ_API_KEY`, `GROQ_MODEL`, and `RAG_EMBEDDING_MODEL` into the current
+PowerShell session (a local `.env` file is loaded by Compose, not by `uv run`),
+then fetch and index the corpus locally and compare the versioned prompts:
 
 ```powershell
+uv run --locked python -m app.infrastructure.rag.document_ingestion.fetch_docs --version 17 --destination data/postgresql
+uv run --locked python -m app.infrastructure.rag.document_ingestion
 uv run --locked python -m scripts.evaluate_rag --output results/rag-evaluation.json
 ```
 
