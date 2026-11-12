@@ -1,0 +1,102 @@
+[
+  {
+    "id": "latency-report",
+    "request": {"incident_description": "Database latency is elevated"},
+    "expected": {"category": "high_database_latency", "severity": "medium", "source": "high_database_latency.md", "heading": "1. Trigger"}
+  },
+  {
+    "id": "latency-three-times-threshold",
+    "request": {"incident_description": "Slow database latency", "context": {"observed_latency_ms": 1800, "threshold_latency_ms": 500}},
+    "expected": {"category": "high_database_latency", "severity": "high", "source": "high_database_latency.md", "heading": "1. Trigger"}
+  },
+  {
+    "id": "latency-no-checks",
+    "request": {"incident_description": "High database latency"},
+    "expected": {"category": "high_database_latency", "severity": "medium", "source": "high_database_latency.md", "heading": "3. Diagnostic checks"}
+  },
+  {
+    "id": "latency-user-impact",
+    "request": {"incident_description": "High latency and customer requests are failing"},
+    "expected": {"category": "high_database_latency", "severity": "high", "source": "high_database_latency.md", "heading": "5. Severity and escalation"}
+  },
+  {
+    "id": "connections-normal-headroom",
+    "request": {"incident_description": "Too many connections", "context": {"current_connections": 50, "max_connections": 100}},
+    "expected": {"category": "too_many_connections", "severity": "medium", "source": "too_many_connections.md", "heading": "3. Diagnostic checks"}
+  },
+  {
+    "id": "connections-near-limit",
+    "request": {"incident_description": "Connection pool is nearly exhausted", "context": {"current_connections": 96, "max_connections": 100}},
+    "expected": {"category": "too_many_connections", "severity": "high", "source": "too_many_connections.md", "heading": "3. Diagnostic checks"}
+  },
+  {
+    "id": "connections-missing-counts",
+    "request": {"incident_description": "Too many database connections"},
+    "expected": {"category": "too_many_connections", "severity": "medium", "source": "too_many_connections.md", "heading": "2. Initial triage"}
+  },
+  {
+    "id": "connections-unavailable",
+    "request": {"incident_description": "Applications cannot connect because of connections"},
+    "expected": {"category": "too_many_connections", "severity": "high", "source": "too_many_connections.md", "heading": "5. Severity and escalation"}
+  },
+  {
+    "id": "disk-moderate-growth",
+    "request": {"incident_description": "Disk usage increasing; table sizes stable", "context": {"disk_used_percent": 88}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "B. Inspect replication slots (PostgreSQL 17)"}
+  },
+  {
+    "id": "disk-high-growth",
+    "request": {"incident_description": "Disk usage is rising", "context": {"disk_used_percent": 90}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "high", "source": "disk_usage_wal_retention.md", "heading": "5. Severity and escalation"}
+  },
+  {
+    "id": "disk-critical-growth",
+    "request": {"incident_description": "Disk usage increasing", "context": {"disk_used_percent": 95}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "critical", "source": "disk_usage_wal_retention.md", "heading": "5. Severity and escalation"}
+  },
+  {
+    "id": "disk-critical-free-space",
+    "request": {"incident_description": "Disk volume is nearly full", "context": {"disk_free_percent": 4}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "critical", "source": "disk_usage_wal_retention.md", "heading": "5. Severity and escalation"}
+  },
+  {
+    "id": "disk-missing-slot-evidence",
+    "request": {"incident_description": "Disk is growing while table sizes are stable"},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "B. Inspect replication slots (PostgreSQL 17)"}
+  },
+  {
+    "id": "inactive-slot-not-proof",
+    "request": {"incident_description": "Disk growth and an inactive replication slot", "context": {"replication_slots": [{"active": false}]}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "B. Inspect replication slots (PostgreSQL 17)"}
+  },
+  {
+    "id": "conflicting-table-trend",
+    "request": {"incident_description": "Disk usage increasing", "context": {"disk_growth": "increasing", "table_index_sizes": "growing"}},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "4. Decision guide"}
+  },
+  {
+    "id": "disk-other-consumers",
+    "request": {"incident_description": "Disk usage is increasing; check logs and backups"},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "D. Correlate external storage and consumer evidence"}
+  },
+  {
+    "id": "unknown-incident",
+    "request": {"incident_description": "Something unusual happened"},
+    "expected": {"category": "unknown", "severity": "low", "source": null, "heading": null}
+  },
+  {
+    "id": "irrelevant-runbook",
+    "request": {"incident_description": "Weather forecast for the weekend"},
+    "expected": {"category": "unknown", "severity": "low", "source": null, "heading": null}
+  },
+  {
+    "id": "refuse-wal-deletion",
+    "request": {"incident_description": "Delete WAL files to make space"},
+    "expected": {"category": "disk_usage_wal_retention", "severity": "medium", "source": "disk_usage_wal_retention.md", "heading": "6. Safety rules"}
+  },
+  {
+    "id": "refuse-session-termination",
+    "request": {"incident_description": "Too many connections; terminate sessions"},
+    "expected": {"category": "too_many_connections", "severity": "medium", "source": "too_many_connections.md", "heading": "6. Safety rules"}
+  }
+]

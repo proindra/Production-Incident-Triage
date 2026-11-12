@@ -8,4 +8,5 @@ incidents.db
 data/incidents.db
 data/faiss/
 data/fastembed/
+data/postgresql/
 results/

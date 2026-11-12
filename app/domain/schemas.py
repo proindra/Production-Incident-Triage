@@ -14,6 +14,14 @@ IncidentCategory = Literal[
     "disk_usage_wal_retention",
     "unknown",
 ]
+CauseClass = Literal[
+    "saturation",
+    "contention",
+    "configuration",
+    "dependency_failure",
+    "data_volume",
+    "unknown",
+]
 SeverityLevel = Literal["low", "medium", "high", "critical"]
 Route = Literal["self-serve runbook", "page-secondary", "incident-commander"]
 RAGStatus = Literal["disabled", "generated", "skipped", "unavailable"]
@@ -202,12 +210,23 @@ def _validate_context(context: dict[str, Any]) -> dict[str, Any]:
 
 
 class RunbookReference(BaseModel):
-    filename: str = Field(description="Runbook filename under corpus/runbooks.")
+    filename: str = Field(description="Path of the source within the indexed corpus.")
     heading: str | None = Field(
         default=None,
         description="Relevant heading from the runbook, when available.",
     )
     excerpt: str = Field(description="Text excerpt supporting the reference.")
+    source_url: str | None = None
+    source_version: str | None = None
+
+
+class ModelUsage(BaseModel):
+    step: str
+    prompt_version: str
+    model: str | None = None
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    cost_usd: float | None = Field(default=None, ge=0)
 
 
 class TriageResponse(BaseModel):
@@ -215,13 +234,22 @@ class TriageResponse(BaseModel):
         default=None, description="Stored incident history identifier, when persistence succeeds."
     )
     category: IncidentCategory = Field(description="Incident category, or unknown if undetermined.")
+    cause_class: CauseClass = "unknown"
     severity: SeverityLevel = Field(description="Severity assigned according to the centralized safety policy.")
     confidence: float = Field(ge=0, le=1)
     route: Route = "self-serve runbook"
     routing_basis: str = "Route selected from the project severity policy."
     verification_passed: bool = True
     agent_steps: int = Field(default=0, ge=0)
+    agent_timings: list[dict[str, Any]] = Field(default_factory=list)
+    retrieval_retries: int = Field(default=0, ge=0)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    prompt_versions: list[str] = Field(
+        default_factory=lambda: ["deterministic-policy-v1"]
+    )
+    safety_flags: list[str] = Field(default_factory=list)
+    model_usage: list[ModelUsage] = Field(default_factory=list)
+    estimated_cost_usd: float | None = Field(default=0.0, ge=0)
     evidence_observed: list[str] = Field(
         description="Facts directly present in the input or returned by executed checks."
     )

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from app.domain.diagnostics import BaseDiagnostic, DiagnosticError, DiagnosticSnapshot
 from app.domain.policies import SafetyPolicy, Severity
 from app.domain.safety import redact_secrets
-from app.domain.schemas import TriageRequest, TriageResponse
+from app.domain.schemas import CauseClass, TriageRequest, TriageResponse
 from app.services.contracts import RAGService
 from app.services.retrieval import RunbookRetriever
 
@@ -32,13 +32,28 @@ class TriageEngine:
         retriever: RunbookRetriever | None = None,
         policy: SafetyPolicy | None = None,
         rag_service: RAGService | None = None,
+        tool_model: Any | None = None,
+        model_name: str | None = None,
+        input_cost_per_million: float | None = None,
+        output_cost_per_million: float | None = None,
+        provider_resilience: Any | None = None,
+        agent_metric_recorder: Callable[[str, str, float], None] | None = None,
     ) -> None:
         self.diagnostic = diagnostic
         self.retriever = retriever or RunbookRetriever()
         self.policy = policy or SafetyPolicy()
         from app.services.agents import IncidentTriageGraph
 
-        self.agent = IncidentTriageGraph(self, rag_service=rag_service)
+        self.agent = IncidentTriageGraph(
+            self,
+            rag_service=rag_service,
+            tool_model=tool_model,
+            model_name=model_name,
+            input_cost_per_million=input_cost_per_million,
+            output_cost_per_million=output_cost_per_million,
+            provider_resilience=provider_resilience,
+            agent_metric_recorder=agent_metric_recorder,
+        )
 
     def triage(self, request: TriageRequest) -> TriageResponse:
         return self.agent.invoke(request)
@@ -107,6 +122,7 @@ class TriageEngine:
         route, routing_basis = _route(severity, category, evidence_values)
         return TriageResponse(
             category=category,
+            cause_class=_cause_class(category, description),
             severity=severity.value,
             confidence=confidence,
             route=route,
@@ -128,13 +144,41 @@ class TriageEngine:
 
 def _classify(description: str) -> str:
     text = description.casefold().replace("-", " ").replace("_", " ")
-    if any(term in text for term in ("disk", "wal", "replication slot", "storage", "volume")):
-        return "disk_usage_wal_retention"
-    if any(term in text for term in ("connection", "connections", "too many clients", "pool exhausted")):
-        return "too_many_connections"
-    if any(term in text for term in ("latency", "slow query", "slow database", "database is slow")):
-        return "high_database_latency"
-    return "unknown"
+    matches = [
+        (category, terms)
+        for category, terms in (
+            (
+                "disk_usage_wal_retention",
+                ("disk", "wal", "replication slot", "storage", "volume"),
+            ),
+            (
+                "too_many_connections",
+                ("connection", "connections", "too many clients", "pool exhausted"),
+            ),
+            (
+                "high_database_latency",
+                ("latency", "slow query", "slow database", "database is slow"),
+            ),
+        )
+        if any(term in text for term in terms)
+    ]
+    return matches[0][0] if len(matches) == 1 else "unknown"
+
+
+def _cause_class(category: str, description: str) -> CauseClass:
+    text = description.casefold()
+    if any(term in text for term in ("misconfig", "configuration error", "wrong setting")):
+        return "configuration"
+    if any(
+        term in text
+        for term in ("dependency unavailable", "upstream unavailable", "service unavailable")
+    ):
+        return "dependency_failure"
+    return {
+        "disk_usage_wal_retention": "data_volume",
+        "too_many_connections": "saturation",
+        "high_database_latency": "contention",
+    }.get(category, "unknown")
 
 
 def _assess(

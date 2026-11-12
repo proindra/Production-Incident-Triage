@@ -103,6 +103,52 @@ verification and fallback escalation, asynchronous status polling, feedback
 persistence/aggregation, rate limiting, source headings, and the health/API
 routes.
 
+## RAG prompt comparison
+
+The batch evaluator compares `grounded-summary-v1` with
+`grounded-summary-v2` on the same fixed cases, using the configured FAISS index
+and Groq-compatible model:
+
+```powershell
+uv run --locked python -m app.infrastructure.rag.document_ingestion.fetch_docs --version 17 --destination data/postgresql
+uv run --locked python -m app.infrastructure.rag.document_ingestion
+uv run --locked python -m scripts.evaluate_rag --output results/rag-evaluation.json
+```
+
+Set `GROQ_API_KEY`, `GROQ_MODEL`, and `RAG_EMBEDDING_MODEL` locally first.
+The evaluation makes model calls for supported cases for both prompt versions;
+provider usage and cost depend on the selected model and configured pricing.
+`GROQ_BASE_URL` can point to an OpenAI-compatible test endpoint. The JSON
+report records per-case summaries, retrieved source headings, token counts,
+optional cost estimates, and aggregate scores. Cases with no expected source
+are used to score retrieval precision but are not sent for summary generation.
+
+Metric definitions and limitations:
+
+- **Context relevance** is exact retrieval accuracy for the expected source
+  filename and heading (and expects no passages for unsupported/irrelevant
+  cases).
+- **Groundedness** is the fraction of generated content sentences with at least
+  one non-trivial word present in a retrieved excerpt.
+- **Faithfulness** is the fraction of non-trivial summary words also present
+  in retrieved excerpts; **hallucination rate** is one minus that score.
+  These are reproducible lexical proxies, not semantic judgments or a
+  substitute for human review.
+- **Citation validity** checks that citations point to retrieved references.
+  The generator independently rejects missing or out-of-context citations.
+- Generation failures are counted separately and excluded from groundedness,
+  faithfulness, and hallucination averages; they count as invalid citations.
+
+The JSON `comparison` section reports each metric before (v1), after (v2), the
+absolute score delta, and which prompt scored better. Higher is better for
+context relevance, groundedness, faithfulness, and citation validity; lower is
+better for hallucination rate. An exact tie is reported as `tie`.
+
+The evaluator emits actual scores only when run against a configured model and
+index. Unit tests validate the scoring and report workflow but are not presented
+as provider-backed evaluation results. Keep model-generated reports local
+unless they are intentionally reviewed and checked in.
+
 ## Manual demo checks
 
 1. `GET /health` returns `{"status":"ok"}`.

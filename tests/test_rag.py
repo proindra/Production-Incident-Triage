@@ -125,7 +125,7 @@ def test_groq_summary_requires_a_citation_from_retrieved_passages() -> None:
 
     result = generator.generate("Disk is growing", {}, [reference])
 
-    assert result.prompt_version == "grounded-summary-v1"
+    assert result.prompt_version == "grounded-summary-v2"
     assert result.prompt_tokens == 23
     assert result.completion_tokens == 11
     assert "[disk.md#Storage]" in result.summary
@@ -143,6 +143,12 @@ def test_groq_summary_requires_a_citation_from_retrieved_passages() -> None:
     )
     with pytest.raises(RAGGenerationError, match="unsafe remediation"):
         unsafe.generate("Disk is growing", {}, [reference])
+
+    unsupported_assertion = GroqSummaryGenerator(
+        FakeChatModel("The cause is confirmed [disk.md#Storage].")
+    )
+    with pytest.raises(RAGGenerationError, match="unsupported cause assertion"):
+        unsupported_assertion.generate("Disk is growing", {}, [reference])
 
 
 def test_groq_prompt_redacts_secrets_before_provider_call() -> None:

@@ -12,6 +12,60 @@ services:
     networks:
       - irt-network
 
+  irt-redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - irt-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    ports:
+      - "2031:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - irt-network
+
+  model-stub:
+    build: .
+    command:
+      [
+        "uv",
+        "run",
+        "--no-sync",
+        "uvicorn",
+        "app.infrastructure.llm.stub:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8010",
+      ]
+    environment:
+      MODEL_STUB_DELAY_SECONDS: ${MODEL_STUB_DELAY_SECONDS:-1}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - irt-network
+
   jaeger:
     image: jaegertracing/all-in-one:1.60
     ports:
@@ -28,6 +82,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       INCIDENT_DB_PATH: /data/incidents.db
       RUNBOOKS_PATH: ${RUNBOOKS_PATH:-/service/corpus/runbooks}
+      POSTGRES_DOCS_PATH: /data/postgresql
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
     volumes:
@@ -64,8 +119,18 @@ services:
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
       TRIAGE_STUB_DELAY_SECONDS: ${TRIAGE_STUB_DELAY_SECONDS:-0}
       RAG_ENABLED: ${RAG_ENABLED:-false}
+      AGENT_TOOL_SELECTION_ENABLED: ${AGENT_TOOL_SELECTION_ENABLED:-false}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-}
+      GROQ_INPUT_COST_PER_MILLION: ${GROQ_INPUT_COST_PER_MILLION:-}
+      GROQ_OUTPUT_COST_PER_MILLION: ${GROQ_OUTPUT_COST_PER_MILLION:-}
+      MODEL_MAX_RETRIES: ${MODEL_MAX_RETRIES:-1}
+      MODEL_RETRY_BACKOFF_SECONDS: ${MODEL_RETRY_BACKOFF_SECONDS:-0.25}
+      MODEL_RETRY_MAX_BACKOFF_SECONDS: ${MODEL_RETRY_MAX_BACKOFF_SECONDS:-2}
+      MODEL_CIRCUIT_FAILURE_THRESHOLD: ${MODEL_CIRCUIT_FAILURE_THRESHOLD:-3}
+      MODEL_CIRCUIT_RESET_SECONDS: ${MODEL_CIRCUIT_RESET_SECONDS:-30}
+      POSTGRES_DOCS_PATH: /data/postgresql
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-}
       FAISS_INDEX_PATH: /data/faiss
       FASTEMBED_CACHE_DIR: /data/fastembed
@@ -79,6 +144,8 @@ services:
         condition: service_healthy
       jaeger:
         condition: service_started
+      model-stub:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -126,6 +193,10 @@ services:
         condition: service_healthy
       irt-postgres-exporter:
         condition: service_started
+      irt-redis-exporter:
+        condition: service_started
+      cadvisor:
+        condition: service_started
     networks:
       - irt-network
 
@@ -135,6 +206,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: local_grafana_password
+      GF_METRICS_ENABLED: "true"
     ports:
       - "2028:3000"
     volumes:

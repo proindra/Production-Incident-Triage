@@ -15,6 +15,7 @@ from app.infrastructure.rag.document_ingestion.loader import IndexedChunk
 
 INDEX_FILENAME = "runbooks.faiss"
 METADATA_FILENAME = "runbooks.json"
+STATS_FILENAME = "runbooks-stats.json"
 FORMAT_VERSION = 1
 
 
@@ -71,6 +72,7 @@ def save_index(
     ) as index_temp:
         index_temp_path = Path(index_temp.name)
     metadata_temp_path: Path | None = None
+    stats_temp_path: Path | None = None
     try:
         faiss.write_index(index, str(index_temp_path))
         with tempfile.NamedTemporaryFile(
@@ -82,12 +84,42 @@ def save_index(
         ) as metadata_temp:
             json.dump(metadata, metadata_temp, ensure_ascii=False, sort_keys=True)
             metadata_temp_path = Path(metadata_temp.name)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path,
+            suffix=".stats.tmp",
+            delete=False,
+        ) as stats_temp:
+            json.dump(
+                {
+                    key: metadata[key]
+                    for key in (
+                        "format_version",
+                        "embedding_model",
+                        "dimension",
+                        "built_at",
+                        "last_update_duration_seconds",
+                        "last_update_chunks_per_second",
+                        "source_versions",
+                    )
+                    if key in metadata
+                }
+                | {"chunk_count": len(metadata.get("chunks", {}))},
+                stats_temp,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            stats_temp_path = Path(stats_temp.name)
         os.replace(index_temp_path, index_file)
         os.replace(metadata_temp_path, metadata_file)
+        os.replace(stats_temp_path, path / STATS_FILENAME)
     finally:
         index_temp_path.unlink(missing_ok=True)
         if metadata_temp_path is not None:
             metadata_temp_path.unlink(missing_ok=True)
+        if stats_temp_path is not None:
+            stats_temp_path.unlink(missing_ok=True)
 
 
 def vector_id(chunk_id: str) -> int:
@@ -102,6 +134,8 @@ def chunk_record(chunk: IndexedChunk) -> dict[str, Any]:
         "heading": chunk.heading,
         "text": chunk.text,
         "content_hash": chunk.content_hash,
+        "source_url": chunk.source_url,
+        "source_version": chunk.source_version,
     }
 
 

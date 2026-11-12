@@ -11,6 +11,29 @@ scrape_configs:
     static_configs:
       - targets: ["irt-prometheus:9090"]
 
+  - job_name: redis
+    static_configs:
+      - targets: ["irt-redis-exporter:9121"]
+
   - job_name: irt-postgres
     static_configs:
       - targets: ["irt-postgres-exporter:9187"]
+
+  - job_name: jaeger
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["jaeger:14269"]
+
+  - job_name: grafana
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["irt-grafana:3000"]
+
+  - job_name: containers
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: model-stub
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["model-stub:8010"]

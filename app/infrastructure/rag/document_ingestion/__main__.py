@@ -24,7 +24,11 @@ def main() -> None:
         settings.embedding_model,
         embeddings,
     )
-    chunks = load_runbook_chunks(settings.runbooks_path, settings.chunk_size)
+    chunks = load_runbook_chunks(
+        settings.runbooks_path,
+        settings.chunk_size,
+        (settings.postgres_docs_path,),
+    )
     update = index_builder.update(chunks)
     print(json.dumps(update.__dict__, sort_keys=True))
 

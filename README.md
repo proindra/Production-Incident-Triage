@@ -7,7 +7,12 @@
 <p align="center">
   <img src="https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Language-Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Agents-LangGraph-1C3C3C?style=for-the-badge" alt="LangGraph">
+  <img src="https://img.shields.io/badge/RAG-FAISS-00599C?style=for-the-badge" alt="FAISS">
+  <img src="https://img.shields.io/badge/LLM-Groq%20optional-F55036?style=for-the-badge" alt="Optional Groq">
   <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Queue-Redis%20%2F%20RQ-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis and RQ">
+  <img src="https://img.shields.io/badge/Containers-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose">
   <img src="https://img.shields.io/badge/Metrics-Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus">
   <img src="https://img.shields.io/badge/Dashboards-Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana">
   <img src="https://img.shields.io/badge/Safety-Advisory--Only-2EA44F?style=for-the-badge" alt="Advisory only">
@@ -188,16 +193,19 @@ Build the local FAISS index before starting RAG workers:
 Copy-Item .env.example .env
 # Edit .env locally and set the RAG values above.
 docker compose build agent-worker
-docker compose run --rm --no-deps agent-worker uv run --no-sync python -m app.infrastructure.rag.document_ingestion
+docker compose run --rm agent-worker uv run --no-sync python -m app.infrastructure.rag.document_ingestion.fetch_docs --version 17 --destination /data/postgresql
+docker compose run --rm agent-worker uv run --no-sync python -m app.infrastructure.rag.document_ingestion
 docker compose up --build -d --scale agent-worker=3
 ```
 
 Ingestion preserves Markdown headings and chunks each runbook into
 approximately `RAG_CHUNK_SIZE`-character passages. FastEmbed creates local
 embeddings; normalized vectors are searched by cosine similarity through
-FAISS. Re-running ingestion embeds only changed/new passages, removes deleted
-ones, and rebuilds all vectors only if the embedding model changes. The model
-files and index are stored under the shared `/data` volume.
+FAISS. The fetch step adds selected official PostgreSQL 17 documentation
+sources to the index in addition to the three project runbooks. Re-running
+ingestion embeds only changed/new passages, removes deleted ones, and rebuilds
+all vectors only if the embedding model changes. The model files and index are
+stored under the shared `/data` volume.
 
 The LangGraph search tool uses FAISS in RAG mode. Groq generates a short
 summary from retrieved passages; source citations are checked, and deterministic
@@ -206,6 +214,34 @@ fails or its citations are invalid, the result clearly reports that it used
 deterministic triage instead. The request description, redacted context, and
 retrieved excerpts are sent to Groq when this mode is enabled. Do not send
 confidential incident data unless your organization approves that provider use.
+
+### Optional model-selected agent tools
+
+Set `AGENT_TOOL_SELECTION_ENABLED=true` to let Groq select among the
+request-field, corpus-search, and clause-lookup tools. The default is disabled;
+the bounded deterministic flow remains available as a fallback, and model
+selection cannot change severity, recommended actions, or perform remediation.
+The option requires `GROQ_API_KEY` and `GROQ_MODEL`, but not RAG embeddings. For
+a local compatibility check, configure the worker with
+`GROQ_API_KEY=stub`, `GROQ_MODEL=stub-model`, and
+`GROQ_BASE_URL=http://model-stub:8010/openai/v1`; the Compose `model-stub`
+service is deterministic and does not contact Groq.
+
+### RAG prompt evaluation
+
+With the selected PostgreSQL docs indexed and Groq settings configured, compare
+the versioned summary prompts on the fixed 20-case dataset:
+
+```powershell
+uv run --locked python -m scripts.evaluate_rag --output results/rag-evaluation.json
+```
+
+The report includes expected-source retrieval accuracy, sentence-level
+groundedness, lexical faithfulness/hallucination proxies, citation validity,
+before/after deltas, and per-case token/cost metadata. The lexical scores are
+not semantic judgments; consult
+[docs/evaluation.md](docs/evaluation.md) for their definitions and limitations.
+The command makes model calls and can incur provider charges.
 
 ## Optional live PostgreSQL diagnostics
 
@@ -295,31 +331,16 @@ The application adapter can use the separate `incident_readonly` role above.
   replace them with their approved incident policy.
 - The default uses keyword retrieval; optional RAG mode uses local embeddings
   and FAISS, while citations are checked against the original runbook text.
--   The default SQLite history is local at `data/incidents.db` and is not intended
+- The default SQLite history is local at `data/incidents.db` and is not intended
   as shared or production storage.
 - The demo UI is intentionally small and should be protected behind suitable
   authentication and network controls before any shared deployment.
-- Deterministic triage is the default. Optional Groq generation records a prompt
-  version and token counts, but prompt-variant evaluation, cost accounting,
-  toxicity detection, and a model-backed injection classifier are not included.
+- Deterministic triage is the default. Optional Groq generation records prompt
+  versions and token counts; cost estimates require configured token prices.
+  Local lexical safety checks and the prompt evaluation workflow are included,
+  but they are not a substitute for human review or a general-purpose safety
+  classifier.
 
 See [architecture and failure behavior](docs/architecture.md),
 [service operations and incident log](docs/service-operations.md), and
 the [evaluation guide](docs/evaluation.md).
-## Implementation progress
-
-- [x] Steps 1–3 — Project scaffold, supplied infrastructure/runbooks, and `uv` environment.
-- [x] Steps 4–5 — Pydantic API contracts, health/triage endpoints, severity, and safety policies.
-- [x] Steps 6–8 — Mock and optional PostgreSQL diagnostics, source-preserving retrieval, and triage workflow.
-- [x] Steps 9–10 — All three scenarios and SQLite incident history.
-- [x] Step 11 — Prometheus targets and exporter metrics verified; Grafana data source and dashboard configured and query-verified.
-- [x] Step 12 — Minimal browser UI.
-- [x] Step 13 — Scenario, policy, API, retrieval, and evaluation tests.
-- [x] Step 14 — Read-only diagnostics, bounded input, secret redaction, and advisory-only safety review.
-- [x] Step 15 — Health/API demo and monitoring service checks documented and tested.
-- [x] LangGraph triage and verification agents with three tools and a bounded retry.
-- [x] Redis/RQ asynchronous submission and polling, containerized API/worker, and worker scaling.
-- [x] Typed alert contract, rejection quarantine, correlation IDs, Prometheus API metrics, and optional OTLP tracing.
-
-Run the evaluation suite with `uv run pytest`. Evaluation scenarios and current
-results are recorded in [docs/evaluation.md](docs/evaluation.md).

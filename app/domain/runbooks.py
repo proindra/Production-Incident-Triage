@@ -10,6 +10,7 @@ class RunbookChunk:
     filename: str
     heading: str | None
     text: str
+    source_url: str | None = None
 
 
 def split_runbook_document(
@@ -18,11 +19,19 @@ def split_runbook_document(
     chunks: list[RunbookChunk] = []
     heading: str | None = None
     current: list[str] = []
+    source_url = next(
+        (
+            line.removeprefix("Source: ").strip()
+            for line in text.splitlines()[:8]
+            if line.startswith("Source: https://www.postgresql.org/docs/")
+        ),
+        None,
+    )
 
     def flush() -> None:
         body = "\n".join(current).strip()
         if body:
-            chunks.append(RunbookChunk(filename, heading, body))
+            chunks.append(RunbookChunk(filename, heading, body, source_url))
 
     for line in text.splitlines():
         if line.startswith("#"):

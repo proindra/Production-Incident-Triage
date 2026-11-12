@@ -21,8 +21,14 @@ _IGNORED = {
 
 
 class RunbookRetriever:
-    def __init__(self, runbooks_path: str | Path = "corpus/runbooks", chunk_size: int = 1200):
+    def __init__(
+        self,
+        runbooks_path: str | Path = "corpus/runbooks",
+        chunk_size: int = 1200,
+        postgres_docs_path: str | Path = "data/postgresql",
+    ):
         self.path = Path(runbooks_path).resolve()
+        self.postgres_docs_path = Path(postgres_docs_path).resolve()
         self.chunk_size = chunk_size
         self._chunks = self._load()
 
@@ -58,6 +64,8 @@ class RunbookRetriever:
                     filename=chunk.filename,
                     heading=chunk.heading,
                     excerpt=chunk.text[:600].strip(),
+                    source_url=chunk.source_url,
+                    source_version=_source_version_for(chunk.filename),
                 )
             )
             if len(results) >= limit:
@@ -74,6 +82,8 @@ class RunbookRetriever:
                 filename=chunk.filename,
                 heading=chunk.heading,
                 excerpt=chunk.text[:600].strip(),
+                source_url=chunk.source_url,
+                source_version=_source_version_for(chunk.filename),
             )
             for chunk in self._chunks
             if chunk.filename == filename
@@ -87,6 +97,14 @@ class RunbookRetriever:
             and chunk.heading == reference.heading
             and reference.excerpt.strip()
             and reference.excerpt.strip() in chunk.text
+            and (
+                reference.source_url is None
+                or reference.source_url == chunk.source_url
+            )
+            and (
+                reference.source_version is None
+                or reference.source_version == _source_version_for(chunk.filename)
+            )
             for chunk in self._chunks
         )
 
@@ -105,7 +123,27 @@ class RunbookRetriever:
                     self.chunk_size,
                 )
             )
+        if self.postgres_docs_path.is_dir():
+            for source in sorted(self.postgres_docs_path.rglob("*.md")):
+                resolved = source.resolve()
+                if self.postgres_docs_path not in resolved.parents:
+                    continue
+                filename = (
+                    f"postgresql/{source.relative_to(self.postgres_docs_path).as_posix()}"
+                )
+                chunks.extend(
+                    split_runbook_document(
+                        filename,
+                        source.read_text(encoding="utf-8"),
+                        self.chunk_size,
+                    )
+                )
         return chunks
+
+
+def _source_version_for(filename: str) -> str | None:
+    match = re.match(r"postgresql/(\d+)/", filename)
+    return match.group(1) if match else None
 
 
 def _terms(text: str) -> set[str]:

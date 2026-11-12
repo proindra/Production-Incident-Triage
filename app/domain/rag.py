@@ -11,6 +11,7 @@ class RAGGeneration:
     prompt_version: str
     prompt_tokens: int | None
     completion_tokens: int | None
+    cost_usd: float | None = None
 
 
 class RAGGenerationError(RuntimeError):

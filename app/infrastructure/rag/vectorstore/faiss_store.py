@@ -97,6 +97,8 @@ class FAISSRunbookStore:
                     filename=record["filename"],
                     heading=record["heading"],
                     excerpt=record["text"][:600].strip(),
+                    source_url=record.get("source_url"),
+                    source_version=record.get("source_version"),
                 )
             )
             if len(references) >= limit:

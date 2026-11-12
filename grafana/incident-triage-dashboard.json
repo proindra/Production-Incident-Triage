@@ -231,6 +231,246 @@
       ],
       "title": "Worker run outcomes",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 8,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(incident_triage_http_request_duration_seconds_bucket{route!=\"/metrics\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "API request p50 latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 9,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(incident_triage_http_requests_total{status=~\"5..\",route!=\"/metrics\"}[5m])) / clamp_min(sum(rate(incident_triage_http_requests_total{route!=\"/metrics\"}[5m])), 1e-9)",
+          "legendFormat": "5xx fraction",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "API error rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 10,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "min_over_time(up[5m])",
+          "legendFormat": "{{job}} {{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Scrape availability by service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "id": 11,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, agent) (rate(incident_triage_agent_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{agent}} p95",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Per-agent step p95 latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 12,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (agent) (rate(incident_triage_agent_success_total[5m])) / clamp_min(sum by (agent) (rate(incident_triage_agent_calls_total[5m])), 1e-9)",
+          "legendFormat": "{{agent}} success fraction",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Per-agent success rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "id": 13,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(incident_triage_retrieval_retries_total[5m]))",
+          "legendFormat": "alternate searches/s",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Verification retry rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "id": 14,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))",
+          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Container CPU utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "id": 15,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (container_label_com_docker_compose_service) (container_memory_usage_bytes{name!=\"\"})",
+          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Container memory utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "id": 16,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "100 * rate(incident_triage_model_cost_usd_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
+          "legendFormat": "cost per 100 successful runs",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Estimated model cost per 100 runs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "id": 17,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "incident_triage_index_chunks",
+          "legendFormat": "indexed chunks",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Indexed corpus size",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

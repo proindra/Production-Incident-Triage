@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -179,7 +182,11 @@ def metrics() -> Response:
         worker_metrics = task_queue.worker_metrics()
     except QueueError as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
-    output = generate_latest().decode("utf-8") + _worker_metrics_text(worker_metrics)
+    output = (
+        generate_latest().decode("utf-8")
+        + _worker_metrics_text(worker_metrics)
+        + _index_metrics_text()
+    )
     return Response(output, media_type=CONTENT_TYPE_LATEST)
 
 
@@ -213,6 +220,161 @@ def _worker_metrics_text(values: dict[str, str]) -> str:
             "incident_triage_tool_calls_total " + values.get("tool_calls", "0"),
         ]
     )
+    lines.extend(
+        [
+            "# HELP incident_triage_retrieval_retries_total Alternate retrieval attempts.",
+            "# TYPE incident_triage_retrieval_retries_total counter",
+            "incident_triage_retrieval_retries_total "
+            + values.get("retrieval_retries", "0"),
+            "# HELP incident_triage_model_prompt_tokens_total Provider prompt tokens.",
+            "# TYPE incident_triage_model_prompt_tokens_total counter",
+            "incident_triage_model_prompt_tokens_total "
+            + values.get("prompt_tokens", "0"),
+            "# HELP incident_triage_model_completion_tokens_total Provider completion tokens.",
+            "# TYPE incident_triage_model_completion_tokens_total counter",
+            "incident_triage_model_completion_tokens_total "
+            + values.get("completion_tokens", "0"),
+            "# HELP incident_triage_model_cost_usd_total Estimated provider cost from configured rates.",
+            "# TYPE incident_triage_model_cost_usd_total counter",
+            "incident_triage_model_cost_usd_total "
+            + values.get("model_cost_usd", "0"),
+            "# HELP incident_triage_agent_calls_total Completed agent steps.",
+            "# TYPE incident_triage_agent_calls_total counter",
+            "# HELP incident_triage_agent_success_total Successful agent steps.",
+            "# TYPE incident_triage_agent_success_total counter",
+            "# HELP incident_triage_agent_failure_total Failed agent steps.",
+            "# TYPE incident_triage_agent_failure_total counter",
+            "# HELP incident_triage_agent_duration_seconds Agent step latency distribution.",
+            "# TYPE incident_triage_agent_duration_seconds histogram",
+        ]
+    )
+    for agent in ("triage", "rag_generation", "verification", "alternate_search"):
+        prefix = f"agent:{agent}:"
+        calls = values.get(prefix + "calls", "0")
+        successes = values.get(prefix + "success", "0")
+        failures = values.get(prefix + "failure", "0")
+        lines.extend(
+            [
+                f'incident_triage_agent_calls_total{{agent="{agent}"}} {calls}',
+                f'incident_triage_agent_success_total{{agent="{agent}"}} {successes}',
+                f'incident_triage_agent_failure_total{{agent="{agent}"}} {failures}',
+            ]
+        )
+    provider_workers = {
+        key.split(":")[1]
+        for key in values
+        if key.startswith("provider:") and key.endswith(":state")
+    }
+    if provider_workers:
+        lines.extend(
+            [
+                "# HELP incident_triage_provider_circuit_open Whether a worker's provider circuit is open.",
+                "# TYPE incident_triage_provider_circuit_open gauge",
+                "# HELP incident_triage_provider_circuit_open_total Provider circuit openings per worker.",
+                "# TYPE incident_triage_provider_circuit_open_total counter",
+            ]
+        )
+        for worker in sorted(provider_workers):
+            safe_worker = "".join(
+                character if character.isalnum() or character in "_.-" else "_"
+                for character in worker
+            )
+            prefix = f"provider:{worker}:"
+            lines.extend(
+                [
+                    f'incident_triage_provider_circuit_open{{worker="{safe_worker}"}} '
+                    + values.get(prefix + "state", "0"),
+                    f'incident_triage_provider_circuit_open_total{{worker="{safe_worker}"}} '
+                    + values.get(prefix + "open_count", "0"),
+                ]
+            )
+        for bucket in (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60):
+            lines.append(
+                "incident_triage_agent_duration_seconds_bucket"
+                f'{{agent="{agent}",le="{bucket}"}} '
+                + values.get(prefix + f"duration_bucket:{bucket}", "0")
+            )
+        lines.extend(
+            [
+                "incident_triage_agent_duration_seconds_bucket"
+                f'{{agent="{agent}",le="+Inf"}} '
+                + values.get(prefix + "duration_bucket:+Inf", "0"),
+                f'incident_triage_agent_duration_seconds_sum{{agent="{agent}"}} '
+                + str(float(values.get(prefix + "duration_ms_sum", "0")) / 1000),
+                f'incident_triage_agent_duration_seconds_count{{agent="{agent}"}} '
+                + calls,
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _index_metrics_text() -> str:
+    stats_path = (
+        Path(os.getenv("FAISS_INDEX_PATH", "data/faiss")) / "runbooks-stats.json"
+    )
+    try:
+        with stats_path.open(encoding="utf-8") as file:
+            stats = json.load(file)
+    except FileNotFoundError:
+        return (
+            "# HELP incident_triage_index_ready Whether a FAISS corpus index is present.\n"
+            "# TYPE incident_triage_index_ready gauge\n"
+            "incident_triage_index_ready 0\n"
+        )
+    except json.JSONDecodeError as error:
+        logger.error("FAISS index statistics are invalid: %s", error)
+        raise HTTPException(
+            status_code=503, detail="FAISS index statistics are invalid."
+        ) from None
+
+    built_at = stats.get("built_at")
+    if not isinstance(built_at, str):
+        raise HTTPException(
+            status_code=503, detail="FAISS index statistics are invalid."
+        )
+    try:
+        built_timestamp = datetime.fromisoformat(
+            built_at.replace("Z", "+00:00")
+        ).timestamp()
+    except ValueError as error:
+        logger.error("FAISS index build timestamp is invalid: %s", error)
+        raise HTTPException(
+            status_code=503, detail="FAISS index statistics are invalid."
+        ) from None
+    lines = [
+        "# HELP incident_triage_index_ready Whether a FAISS corpus index is present.",
+        "# TYPE incident_triage_index_ready gauge",
+        "incident_triage_index_ready 1",
+        "# HELP incident_triage_index_chunks Number of indexed corpus chunks.",
+        "# TYPE incident_triage_index_chunks gauge",
+        f"incident_triage_index_chunks {int(stats.get('chunk_count', 0))}",
+        "# HELP incident_triage_index_build_timestamp_seconds Unix time of the last index build.",
+        "# TYPE incident_triage_index_build_timestamp_seconds gauge",
+        f"incident_triage_index_build_timestamp_seconds {built_timestamp}",
+        "# HELP incident_triage_index_build_duration_seconds Last index build duration.",
+        "# TYPE incident_triage_index_build_duration_seconds gauge",
+        f"incident_triage_index_build_duration_seconds {float(stats.get('last_update_duration_seconds', 0.0))}",
+        "# HELP incident_triage_index_embed_chunks_per_second Last index embedding throughput.",
+        "# TYPE incident_triage_index_embed_chunks_per_second gauge",
+        f"incident_triage_index_embed_chunks_per_second {float(stats.get('last_update_chunks_per_second', 0.0))}",
+    ]
+    source_versions = stats.get("source_versions", [])
+    if not isinstance(source_versions, list):
+        raise HTTPException(
+            status_code=503, detail="FAISS index statistics are invalid."
+        )
+    if source_versions:
+        lines.extend(
+            [
+                "# HELP incident_triage_index_source_version Information about indexed PostgreSQL documentation versions.",
+                "# TYPE incident_triage_index_source_version gauge",
+            ]
+        )
+    for version in source_versions:
+        if isinstance(version, str) and version.isdigit():
+            lines.append(
+                f'incident_triage_index_source_version{{version="{version}"}} 1'
+            )
     return "\n".join(lines) + "\n"
 
 

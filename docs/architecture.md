@@ -23,6 +23,7 @@ Browser / API client
     -> agent-worker replica
         -> LangGraph Triage Agent
             -> request-field lookup
+            -> model-selected tools when enabled, otherwise deterministic tool flow
             -> keyword search (default) or semantic FAISS search (RAG mode)
             -> clause lookup when the disk/WAL scenario calls for it
         -> optional Groq summary over retrieved passages
@@ -45,12 +46,15 @@ text. The graph is bounded by an eight-tool-call limit, one retry, and the RQ
 120-second job timeout.
 
 Severity, routing, and recommended actions remain deterministic. With
-`RAG_ENABLED=false`, the service makes no model calls. In RAG mode, the worker
-uses local FastEmbed embeddings with a persistent FAISS index and calls Groq
-only to generate a short, cited summary. The model does not choose severity,
-execute tools, or alter the deterministic action policy. The summary includes a
-prompt version and provider-reported token counts; cost accounting and
-toxicity-classifier integration are not implemented.
+`RAG_ENABLED=false` and `AGENT_TOOL_SELECTION_ENABLED=false`, the service makes
+no model calls. In RAG mode, the worker uses local FastEmbed embeddings with a
+persistent FAISS index and calls Groq to generate a short, cited summary.
+Model-selected tool use is separately gated by
+`AGENT_TOOL_SELECTION_ENABLED`; it is bounded and cannot change the deterministic
+policy or perform remediation. Local lexical input/output safety checks are
+enabled, but they are not a general toxicity or prompt-injection classifier.
+The summary records a prompt version and provider-reported token counts; cost
+estimates are emitted only when both token prices are configured.
 
 ## Tools
 
@@ -85,6 +89,11 @@ The optional FAISS ingestion command is
 embeddings, replaces changed chunks, removes deleted chunks, and re-embeds the
 corpus when the configured embedding model changes. The default chunker
 preserves Markdown headings and uses approximately 1,200 characters per chunk.
+Download PostgreSQL 17 documentation before indexing with:
+
+```powershell
+python -m app.infrastructure.rag.document_ingestion.fetch_docs --version 17 --destination data/postgresql
+```
 
 The API exports request counters and latency histograms at `/metrics`.
 `RATE_LIMIT_PER_MINUTE` controls per-client submission limits. The default
@@ -98,4 +107,7 @@ The SLO and load procedure are declared in [evaluation.md](./evaluation.md).
 worker execution, rather than only the HTTP submission latency. Set
 `TRIAGE_STUB_DELAY_SECONDS` to simulate fixed provider latency for a load run;
 the previously reported load results used deterministic mode and do not measure
-Groq provider latency.
+Groq provider latency. `scripts/evaluate_rag.py` compares the two versioned
+summary prompts and reports retrieval relevance, lexical grounding, and
+citation validity; its lexical scores are proxies rather than semantic or
+human-judged results.

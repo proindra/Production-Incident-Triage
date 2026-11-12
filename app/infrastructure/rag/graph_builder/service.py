@@ -12,6 +12,7 @@ from app.domain.schemas import RunbookReference
 from app.infrastructure.rag.config import RAGSettings
 from app.infrastructure.rag.node.generate_summary import GroqSummaryGenerator
 from app.infrastructure.rag.vectorstore import FAISSRunbookStore
+from app.infrastructure.llm.resilience import ProviderResilience
 
 
 class RunbookRAG:
@@ -26,7 +27,11 @@ class RunbookRAG:
         self.top_k = top_k
 
     @classmethod
-    def from_settings(cls, settings: RAGSettings) -> RunbookRAG:
+    def from_settings(
+        cls,
+        settings: RAGSettings,
+        provider_resilience: ProviderResilience | None = None,
+    ) -> RunbookRAG:
         settings.require_generation_settings()
         embedding_model = settings.embedding_model
         api_key = settings.groq_api_key
@@ -46,14 +51,20 @@ class RunbookRAG:
         model = ChatGroq(
             api_key=api_key,
             model=groq_model,
+            base_url=settings.groq_base_url,
             temperature=0,
             max_tokens=300,
             timeout=settings.timeout_seconds,
-            max_retries=1,
+            max_retries=0,
         )
         return cls(
             store=store,
-            generator=GroqSummaryGenerator(model),
+            generator=GroqSummaryGenerator(
+                model,
+                settings.input_cost_per_million,
+                settings.output_cost_per_million,
+                provider_resilience,
+            ),
             top_k=settings.top_k,
         )
 

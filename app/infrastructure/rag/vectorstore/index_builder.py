@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -32,6 +34,9 @@ class IndexUpdate:
     removed: int
     unchanged: int
     total: int
+    built_at: str
+    duration_seconds: float
+    chunks_per_second: float
 
 
 class FAISSIndexBuilder:
@@ -46,6 +51,7 @@ class FAISSIndexBuilder:
         self.embeddings = embeddings
 
     def update(self, chunks: list[IndexedChunk]) -> IndexUpdate:
+        started = time.perf_counter()
         if not chunks:
             raise ValueError("Cannot build a FAISS index without runbook chunks.")
         self.path.mkdir(parents=True, exist_ok=True)
@@ -77,6 +83,7 @@ class FAISSIndexBuilder:
 
             if previous_index is None or model_changed:
                 updated_index, stored = self._rebuild(chunks)
+                embedded_count = len(chunks)
                 added_count = len(chunks) if previous_index is None else 0
                 changed_count = 0 if previous_index is None else len(chunks)
                 removed_count = 0 if previous_index is None else len(removed_ids)
@@ -105,6 +112,7 @@ class FAISSIndexBuilder:
                             dtype=np.int64,
                         ),
                     )
+                embedded_count = len(changed_chunks)
 
                 stored = {
                     chunk_id: chunk_record(chunk)
@@ -115,20 +123,41 @@ class FAISSIndexBuilder:
                 removed_count = len(removed_ids)
                 unchanged_count = len(unchanged_ids)
 
+            built_at = datetime.now(timezone.utc).isoformat()
+            duration_seconds = time.perf_counter() - started
             metadata = {
                 "format_version": 1,
                 "embedding_model": self.embedding_model,
                 "dimension": int(updated_index.d),
                 "chunks": stored,
+                "built_at": built_at,
+                "last_update_duration_seconds": duration_seconds,
+                "last_update_chunks_per_second": (
+                    embedded_count / duration_seconds if duration_seconds > 0 else 0.0
+                ),
+                "source_versions": sorted(
+                    {
+                        chunk.source_version
+                        for chunk in chunks
+                        if chunk.source_version is not None
+                    }
+                ),
             }
             save_index(self.path, updated_index, metadata)
 
+        duration_seconds = time.perf_counter() - started
+        built_at = metadata["built_at"]
         return IndexUpdate(
             added=added_count,
             changed=changed_count,
             removed=removed_count,
             unchanged=unchanged_count,
             total=len(stored),
+            built_at=built_at,
+            duration_seconds=duration_seconds,
+            chunks_per_second=(
+                embedded_count / duration_seconds if duration_seconds > 0 else 0.0
+            ),
         )
 
     def _rebuild(
