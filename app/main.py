@@ -1,3 +1,10 @@
-"""Application entry point placeholder for Step 1."""
+from fastapi import FastAPI
 
-__all__ = []
+from app.schemas import HealthResponse
+
+app = FastAPI(title="Incident Runbook Triage Assistant")
+
+
+@app.get("/health", response_model=HealthResponse, tags=["health"])
+def health() -> HealthResponse:
+    return HealthResponse(status="ok")

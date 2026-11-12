@@ -56,6 +56,16 @@ uv sync
 uv run pytest
 ```
 
+Start the API locally with:
+
+```powershell
+uv run uvicorn app.main:app --reload
+```
+
+The health endpoint is available at `http://127.0.0.1:8000/health`.
+Triage request and response schemas are defined; the triage route will be
+connected when the workflow is implemented in Step 8.
+
 Run Python commands inside the project environment with `uv run`, for
 example `uv run python --version`. To add a runtime dependency, use
 `uv add <package>`; for a development dependency, use
@@ -64,9 +74,9 @@ example `uv run python --version`. To add a runtime dependency, use
 ## Implementation progress
 
 - [x] Step 1 — Create the project structure and place the existing runbooks and configuration files in their expected locations.
-- [ ] Step 2 — Validate the user-provided files and review the Docker Compose and Prometheus configuration.
+- [x] Step 2 — Validate the user-provided files and review the Docker Compose and Prometheus configuration; start the stack and verify Prometheus targets.
 - [x] Step 3 — Set up the Python environment and dependencies with uv.
-- [ ] Step 4 — Define API schemas and implement the health endpoint.
+- [ ] Step 4 — Define API schemas and implement the health endpoint (schemas and `GET /health` are done; triage route awaits Step 8).
 - [ ] Step 5 — Centralize severity and safety policies.
 - [ ] Step 6 — Build diagnostic adapters.
 - [ ] Step 7 — Implement runbook retrieval.
@@ -79,4 +89,4 @@ example `uv run python --version`. To add a runtime dependency, use
 - [ ] Step 14 — Complete the security and reliability review.
 - [ ] Step 15 — Complete the demo checklist.
 
-Steps 1 and 3 are complete. Step 2's Compose configuration validation passed, but the Docker stack has not yet been confirmed running. Application implementation steps remain.
+Steps 1, 2, and 3 are complete. Step 4 has its schemas and health endpoint implemented; the triage route remains for Step 8. All Docker Compose services are running, PostgreSQL is healthy, and both Prometheus scrape targets are up.
