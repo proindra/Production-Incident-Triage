@@ -178,11 +178,12 @@ finished or failed. The worker verifies citations before returning a
 recommendation and escalates instead of returning an unsupported answer.
 `GET /ready` checks Redis availability; `GET /health` checks API liveness.
 
-The backwards-compatible description form is:
+To try the difficult WAL-retention scenario in the UI, enter this incident
+description and context. The equivalent backwards-compatible API request is:
 
 ```json
 {
-  "incident_description": "Disk usage increasing while table/index sizes remain stable",
+  "incident_description": "Disk usage on the primary is climbing steadily. Table and index sizes are not growing. Disk filling, cause unknown.",
   "context": {
     "disk_used_percent": 88,
     "disk_growth": "increasing",
@@ -190,6 +191,10 @@ The backwards-compatible description form is:
   }
 }
 ```
+
+Expect disk/WAL triage with medium severity. WAL retention should be described
+as a possible cause, not a confirmed one; the default mock adapter should report
+that no live diagnostic checks were performed.
 
 The typed alert form supports an explicit on-call note:
 
