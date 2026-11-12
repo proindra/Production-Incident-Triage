@@ -76,8 +76,8 @@ flowchart TD
     Queue --> Redis[(Redis and RQ)]
     Redis --> Worker[Background worker]
 
-    Worker --> Triage[LangGraph triage agent<br/>classify and gather evidence]
-    Triage --> ToolMode{Model tool selection enabled?}
+    Worker --> Agent1[Agent 1 - Incident Investigation Agent<br/>classify and gather evidence]
+    Agent1 --> ToolMode{Model tool selection enabled?}
     ToolMode -- Yes --> ToolModel[Groq tool-calling model]
     ToolModel -- Tool call --> ModelTools[Bounded tools<br/>request fields, corpus search,<br/>clause lookup]
     ModelTools -- Tool result --> ToolModel
@@ -96,7 +96,7 @@ flowchart TD
     FAISS --> Semantic
     Keyword --> Evidence
     Semantic --> Evidence
-    Triage --> DiagnosticMode{DATABASE_URL configured?}
+    Agent1 --> DiagnosticMode{DATABASE_URL configured?}
     DiagnosticMode -- No --> MockDiagnostics[Mock adapter<br/>no live checks]
     DiagnosticMode -- Yes --> ReadOnlyDiagnostics[Read-only PostgreSQL checks]
     ReadOnlyDiagnostics --> Postgres[(PostgreSQL diagnostic target)]
@@ -106,11 +106,15 @@ flowchart TD
 
     Policy --> SummaryMode{RAG summary available?}
     SummaryMode -- Yes --> Groq[Grounded Groq summary<br/>versioned prompt]
-    SummaryMode -- No --> Verify[Separate LangGraph<br/>verification agent]
-    Groq --> Verify
-    Verify -- Verification fails --> Retry[Alternate retrieval<br/>one retry maximum]
+    SummaryMode -- No --> Agent2[Agent 2 - Evidence Verification & Routing Agent]
+    Groq --> Agent2
+    Agent2 --> Verified{Evidence and citations verified?}
+    Verified -- Yes --> Return[Return verified recommendation]
+    Verified -- No - retry available --> Retry[Alternate retrieval<br/>maximum one retry]
     Retry --> Policy
-    Verify -- Verified or retry exhausted --> Result[Verified result or<br/>human escalation]
+    Verified -- No - retry already used --> Escalation[Human escalation<br/>no unverified recommendation]
+    Return --> Result[Persist completed result]
+    Escalation --> Result
     Result --> SQLite
     Result --> Redis
 
@@ -136,14 +140,16 @@ flowchart TD
 ```
 
 Valid requests are processed asynchronously; the API returns a run ID while
-the triage agent gathers evidence and hands the result to a separate
-verification agent. Tool selection can be model-driven or use the bounded
-deterministic flow. RAG and Groq summaries are optional; severity, routing, and
-recommended actions remain deterministic. Failed verification triggers one
-alternate search, then escalation instead of an unsupported answer. SQLite
-keeps incident metadata, rejected-request records, and feedback; Redis/RQ
-tracks job status and results. Model tool selection is limited to four rounds
-and eight total tool calls per run.
+Agent 1 (Incident Investigation Agent) classifies the incident and gathers
+evidence. Agent 2 (Evidence Verification & Routing Agent) verifies the
+evidence and citations. A failed verification triggers at most one alternate
+retrieval; if verification still fails, the result is escalated without an
+unsupported recommendation. Tool selection can be model-driven or use the
+bounded deterministic flow. RAG and Groq summaries are optional; severity,
+routing, and recommended actions remain deterministic. SQLite keeps incident
+metadata, rejected-request records, and feedback; Redis/RQ tracks job status
+and results. Model tool selection is limited to four rounds and eight total
+tool calls per run.
 
 ## Run with Docker Compose
 
