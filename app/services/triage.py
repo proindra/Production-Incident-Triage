@@ -6,12 +6,12 @@ import json
 import logging
 from typing import Any
 
-from app.diagnostics.base import BaseDiagnostic, DiagnosticError, DiagnosticSnapshot
-from app.diagnostics.mock import MockDiagnostic
-from app.policies import SafetyPolicy, Severity
-from app.retrieval import RunbookRetriever
-from app.safety import redact_secrets
-from app.schemas import TriageRequest, TriageResponse
+from app.domain.diagnostics import BaseDiagnostic, DiagnosticError, DiagnosticSnapshot
+from app.domain.policies import SafetyPolicy, Severity
+from app.domain.safety import redact_secrets
+from app.domain.schemas import TriageRequest, TriageResponse
+from app.services.contracts import RAGService
+from app.services.retrieval import RunbookRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,23 @@ class TriageEngine:
         diagnostic: BaseDiagnostic | None = None,
         retriever: RunbookRetriever | None = None,
         policy: SafetyPolicy | None = None,
+        rag_service: RAGService | None = None,
     ) -> None:
-        self.diagnostic = diagnostic or MockDiagnostic()
+        self.diagnostic = diagnostic
         self.retriever = retriever or RunbookRetriever()
         self.policy = policy or SafetyPolicy()
+        from app.services.agents import IncidentTriageGraph
+
+        self.agent = IncidentTriageGraph(self, rag_service=rag_service)
 
     def triage(self, request: TriageRequest) -> TriageResponse:
+        return self.agent.invoke(request)
+
+    def _triage_once(
+        self,
+        request: TriageRequest,
+        references: list | None = None,
+    ) -> TriageResponse:
         description = redact_secrets(request.incident_description)
         category = _classify(description)
         context = request.context or {}
@@ -45,7 +56,7 @@ class TriageEngine:
         }
         diagnostic = DiagnosticSnapshot()
         diagnostic_error: str | None = None
-        if category != "unknown":
+        if category != "unknown" and self.diagnostic is not None:
             try:
                 diagnostic = self.diagnostic.collect(category)
             except DiagnosticError as error:
@@ -86,16 +97,20 @@ class TriageEngine:
                 0,
                 "Refused: no destructive remediation was executed. Any slot, WAL, session, or setting change requires an authorized human and an approved procedure.",
             )
-        references = self.retriever.retrieve(
-            f"{description} "
-            + " ".join(f"{key} {value}" for key, value in safe_context.items()),
-            limit=3,
-        )
+        if references is None:
+            references = self.retriever.retrieve(
+                f"{description} "
+                + " ".join(f"{key} {value}" for key, value in safe_context.items()),
+                limit=3,
+            )
         confidence = _confidence(category, evidence_values, diagnostic)
+        route, routing_basis = _route(severity, category, evidence_values)
         return TriageResponse(
             category=category,
             severity=severity.value,
             confidence=confidence,
+            route=route,
+            routing_basis=routing_basis,
             evidence_observed=evidence,
             hypotheses=hypotheses,
             checks_performed=diagnostic.checks_performed,
@@ -105,6 +120,10 @@ class TriageEngine:
             escalation_guidance=_escalation(severity),
             uncertainties=uncertainties,
         )
+
+    @staticmethod
+    def _classify_for_agent(request: TriageRequest) -> str:
+        return _classify(request.incident_description)
 
 
 def _classify(description: str) -> str:
@@ -257,6 +276,35 @@ def _escalation(severity: Severity) -> str:
     if severity == Severity.MEDIUM:
         return "Have the responsible owner review the evidence and trend; escalate if impact increases or evidence remains ambiguous."
     return "Continue safe evidence collection and escalate if customer impact, rapid deterioration, or a safety concern is identified."
+
+
+def _route(
+    severity: Severity, category: str, evidence: dict[str, Any]
+) -> tuple[str, str]:
+    if severity == Severity.CRITICAL:
+        return "incident-commander", "Critical severity requires immediate incident command."
+    if severity == Severity.HIGH:
+        return "page-secondary", "High severity requires prompt human review."
+    if category == "unknown":
+        return "page-secondary", "An unsupported or ambiguous incident requires human review."
+    if category == "disk_usage_wal_retention" and not _slot_retention_signal(
+        evidence.get("replication_slots"), evidence.get("consumer_health")
+    ):
+        return (
+            "page-secondary",
+            "WAL retention is not corroborated by slot and consumer-progress evidence.",
+        )
+    if category == "too_many_connections" and (
+        _number(evidence.get("current_connections")) is None
+        or _number(evidence.get("max_connections")) is None
+    ):
+        return "page-secondary", "Connection capacity is not confirmed by both counts."
+    if category == "high_database_latency" and (
+        _number(evidence.get("observed_latency_ms")) is None
+        or _number(evidence.get("threshold_latency_ms")) is None
+    ):
+        return "page-secondary", "Latency impact is not quantified against a threshold."
+    return "self-serve runbook", "A supported runbook applies and the severity is not high or critical."
 
 
 def _confidence(category: str, values: dict[str, Any], diagnostic: DiagnosticSnapshot) -> float:

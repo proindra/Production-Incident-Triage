@@ -1,6 +1,6 @@
-from app.safety import redact_secrets
-from app.schemas import TriageRequest
-from app.triage import TriageEngine
+from app.domain.safety import redact_secrets
+from app.domain.schemas import TriageRequest
+from app.services.triage import TriageEngine
 
 
 def test_secret_redaction_covers_key_values_and_database_urls() -> None:

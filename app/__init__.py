@@ -1,3 +1,3 @@
-"""Incident runbook triage package placeholder."""
+"""PostgreSQL incident triage application."""
 
 __all__ = []

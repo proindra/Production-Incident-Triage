@@ -5,3 +5,7 @@ __pycache__/
 .env
 .DS_Store
 incidents.db
+data/incidents.db
+data/faiss/
+data/fastembed/
+results/

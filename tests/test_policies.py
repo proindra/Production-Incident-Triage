@@ -1,6 +1,6 @@
 import pytest
 
-from app.policies import SafetyPolicy, Severity
+from app.domain.policies import SafetyPolicy, Severity
 
 
 @pytest.mark.parametrize(

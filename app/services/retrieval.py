@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
-from app.schemas import RunbookReference
+from app.domain.runbooks import RunbookChunk, split_runbook_document
+from app.domain.schemas import RunbookReference
 
 
 _WORD = re.compile(r"[a-z0-9_]+")
@@ -19,13 +20,6 @@ _IGNORED = {
 }
 
 
-@dataclass(frozen=True)
-class RunbookChunk:
-    filename: str
-    heading: str | None
-    text: str
-
-
 class RunbookRetriever:
     def __init__(self, runbooks_path: str | Path = "corpus/runbooks", chunk_size: int = 1200):
         self.path = Path(runbooks_path).resolve()
@@ -33,11 +27,18 @@ class RunbookRetriever:
         self._chunks = self._load()
 
     def retrieve(self, query: str, limit: int = 3) -> list[RunbookReference]:
+        return [
+            reference.model_copy()
+            for reference in self._retrieve_cached(query, limit)
+        ]
+
+    @lru_cache(maxsize=512)
+    def _retrieve_cached(self, query: str, limit: int) -> tuple[RunbookReference, ...]:
         if limit <= 0:
-            return []
+            return ()
         terms = _terms(query)
         if not terms:
-            return []
+            return ()
         ranked: list[tuple[int, RunbookChunk]] = []
         for chunk in self._chunks:
             searchable = _terms(f"{chunk.heading or ''} {chunk.text}")
@@ -61,7 +62,33 @@ class RunbookRetriever:
             )
             if len(results) >= limit:
                 break
-        return results
+        return tuple(results)
+
+    def lookup_clause(self, source_id: str) -> list[RunbookReference]:
+        filename, separator, heading_query = source_id.partition("#")
+        if not separator or not filename or not heading_query:
+            return []
+        heading_query = heading_query.casefold()
+        return [
+            RunbookReference(
+                filename=chunk.filename,
+                heading=chunk.heading,
+                excerpt=chunk.text[:600].strip(),
+            )
+            for chunk in self._chunks
+            if chunk.filename == filename
+            and chunk.heading is not None
+            and heading_query in chunk.heading.casefold()
+        ]
+
+    def verifies(self, reference: RunbookReference) -> bool:
+        return any(
+            chunk.filename == reference.filename
+            and chunk.heading == reference.heading
+            and reference.excerpt.strip()
+            and reference.excerpt.strip() in chunk.text
+            for chunk in self._chunks
+        )
 
     def _load(self) -> list[RunbookChunk]:
         if not self.path.is_dir():
@@ -71,32 +98,14 @@ class RunbookRetriever:
             resolved = source.resolve()
             if resolved.parent != self.path:
                 continue
-            chunks.extend(_split_document(source.name, source.read_text(encoding="utf-8"), self.chunk_size))
+            chunks.extend(
+                split_runbook_document(
+                    source.name,
+                    source.read_text(encoding="utf-8"),
+                    self.chunk_size,
+                )
+            )
         return chunks
-
-
-def _split_document(filename: str, text: str, chunk_size: int) -> list[RunbookChunk]:
-    chunks: list[RunbookChunk] = []
-    heading: str | None = None
-    current: list[str] = []
-
-    def flush() -> None:
-        body = "\n".join(current).strip()
-        if body:
-            chunks.append(RunbookChunk(filename, heading, body))
-
-    for line in text.splitlines():
-        if line.startswith("#"):
-            flush()
-            current.clear()
-            heading = line.lstrip("#").strip() or None
-            continue
-        current.append(line)
-        if len("\n".join(current)) >= chunk_size:
-            flush()
-            current.clear()
-    flush()
-    return chunks
 
 
 def _terms(text: str) -> set[str]:

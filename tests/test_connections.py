@@ -1,5 +1,5 @@
-from app.schemas import TriageRequest
-from app.triage import TriageEngine
+from app.domain.schemas import TriageRequest
+from app.services.triage import TriageEngine
 
 
 def test_connection_counts_are_reported_from_supplied_context() -> None:

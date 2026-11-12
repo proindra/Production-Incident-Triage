@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from app.safety import redact_secrets
-from app.schemas import TriageResponse
+from app.domain.safety import redact_secrets
+from app.domain.schemas import TriageResponse
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,12 @@ class StorageError(RuntimeError):
     """Incident history could not be written or initialized."""
 
 
+class IncidentNotFoundError(LookupError):
+    """Feedback references an incident that is not in local history."""
+
+
 class IncidentStore:
-    def __init__(self, database_path: str | Path = "incidents.db") -> None:
+    def __init__(self, database_path: str | Path = "data/incidents.db") -> None:
         self.database_path = str(database_path)
         if self.database_path == ":memory:":
             raise ValueError("Incident history requires a file-backed SQLite database.")
@@ -40,6 +44,27 @@ class IncidentStore:
                         runbook_references TEXT NOT NULL,
                         recommendations TEXT NOT NULL,
                         status TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS incident_feedback (
+                        feedback_id TEXT PRIMARY KEY,
+                        incident_id TEXT NOT NULL,
+                        timestamp TEXT NOT NULL,
+                        satisfied INTEGER NOT NULL,
+                        reason TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS quarantined_requests (
+                        quarantine_id TEXT PRIMARY KEY,
+                        timestamp TEXT NOT NULL,
+                        payload_summary TEXT NOT NULL,
+                        field_errors TEXT NOT NULL
                     )
                     """
                 )
@@ -87,6 +112,80 @@ class IncidentStore:
             logger.error("Incident history write failed (%s).", type(error).__name__)
             raise StorageError("Incident history could not be saved.") from None
         return incident_id
+
+    def quarantine(self, payload: str, field_errors: list[dict[str, str]]) -> str:
+        quarantine_id = str(uuid.uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+        payload_summary = redact_secrets(payload[:10_000])
+        errors_json = json.dumps(field_errors, sort_keys=True)
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO quarantined_requests (
+                        quarantine_id, timestamp, payload_summary, field_errors
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (quarantine_id, timestamp, payload_summary, errors_json),
+                )
+        except sqlite3.Error as error:
+            logger.error("Request quarantine write failed (%s).", type(error).__name__)
+            raise StorageError("The rejected request could not be quarantined.") from None
+        return quarantine_id
+
+    def record_feedback(
+        self, incident_id: str, satisfied: bool, reason: str
+    ) -> str:
+        feedback_id = str(uuid.uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+        try:
+            with self._connection() as connection:
+                exists = connection.execute(
+                    "SELECT 1 FROM incidents WHERE incident_id = ?",
+                    (incident_id,),
+                ).fetchone()
+                if exists is None:
+                    raise IncidentNotFoundError(incident_id)
+                connection.execute(
+                    """
+                    INSERT INTO incident_feedback (
+                        feedback_id, incident_id, timestamp, satisfied, reason
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        feedback_id,
+                        incident_id,
+                        timestamp,
+                        int(satisfied),
+                        redact_secrets(reason),
+                    ),
+                )
+        except sqlite3.Error as error:
+            logger.error("Feedback write failed (%s).", type(error).__name__)
+            raise StorageError("Feedback could not be saved.") from None
+        return feedback_id
+
+    def feedback_summary(self) -> dict[str, int | float]:
+        try:
+            with self._connection() as connection:
+                row = connection.execute(
+                    """
+                    SELECT COUNT(*),
+                           COALESCE(SUM(CASE WHEN satisfied = 1 THEN 1 ELSE 0 END), 0),
+                           COALESCE(SUM(CASE WHEN satisfied = 0 THEN 1 ELSE 0 END), 0)
+                    FROM incident_feedback
+                    """
+                ).fetchone()
+        except sqlite3.Error as error:
+            logger.error("Feedback aggregation failed (%s).", type(error).__name__)
+            raise StorageError("Feedback summary could not be retrieved.") from None
+        total, satisfied, unsatisfied = row
+        return {
+            "total": total,
+            "satisfied": satisfied,
+            "unsatisfied": unsatisfied,
+            "satisfaction_rate": satisfied / total if total else 0.0,
+        }
 
     def list_recent(self, limit: int = 50) -> list[dict[str, str]]:
         if not 1 <= limit <= 500:

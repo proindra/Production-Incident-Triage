@@ -1,6 +1,6 @@
-from app.diagnostics.mock import MockDiagnostic
-from app.schemas import TriageRequest
-from app.triage import TriageEngine
+from app.domain.schemas import TriageRequest
+from app.infrastructure.diagnostics.mock import MockDiagnostic
+from app.services.triage import TriageEngine
 
 
 def test_latency_uses_reported_metrics_and_explicit_mock_checks() -> None:

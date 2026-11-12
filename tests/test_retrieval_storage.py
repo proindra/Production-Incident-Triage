@@ -1,9 +1,9 @@
 import sqlite3
 
-from app.retrieval import RunbookRetriever
-from app.schemas import TriageRequest
-from app.storage.incidents import IncidentStore
-from app.triage import TriageEngine
+from app.domain.schemas import TriageRequest
+from app.infrastructure.storage.incidents import IncidentStore
+from app.services.retrieval import RunbookRetriever
+from app.services.triage import TriageEngine
 
 
 def test_runbook_retrieval_returns_existing_source_and_heading() -> None:

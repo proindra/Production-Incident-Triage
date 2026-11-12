@@ -1,7 +1,7 @@
 import pytest
 
-from app.schemas import TriageRequest
-from app.triage import TriageEngine
+from app.domain.schemas import TriageRequest
+from app.services.triage import TriageEngine
 
 
 CASES = [

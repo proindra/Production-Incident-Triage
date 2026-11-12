@@ -2,6 +2,97 @@
 name: incident-runbook-triage
 
 services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - irt-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    ports:
+      - "2030:16686"
+    networks:
+      - irt-network
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      REDIS_URL: redis://redis:6379/0
+      INCIDENT_DB_PATH: /data/incidents.db
+      RUNBOOKS_PATH: ${RUNBOOKS_PATH:-/service/corpus/runbooks}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+    volumes:
+      - irt-incident-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - irt-network
+
+  agent-worker:
+    build: .
+    command:
+      ["uv", "run", "--no-sync", "rq", "worker", "triage", "--url", "redis://redis:6379/0"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      REDIS_URL: redis://redis:6379/0
+      INCIDENT_DB_PATH: /data/incidents.db
+      RUNBOOKS_PATH: ${RUNBOOKS_PATH:-/service/corpus/runbooks}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+      TRIAGE_STUB_DELAY_SECONDS: ${TRIAGE_STUB_DELAY_SECONDS:-0}
+      RAG_ENABLED: ${RAG_ENABLED:-false}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-}
+      FAISS_INDEX_PATH: /data/faiss
+      FASTEMBED_CACHE_DIR: /data/fastembed
+      RAG_TOP_K: ${RAG_TOP_K:-4}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-1200}
+      GROQ_TIMEOUT_SECONDS: ${GROQ_TIMEOUT_SECONDS:-30}
+    volumes:
+      - irt-incident-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from redis import Redis; Redis.from_url('redis://redis:6379/0').ping()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - irt-network
+
   irt-postgres:
     image: postgres:17
     container_name: irt-postgres
@@ -31,6 +122,8 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - irt-prometheus-data:/prometheus
     depends_on:
+      api:
+        condition: service_healthy
       irt-postgres-exporter:
         condition: service_started
     networks:
@@ -69,6 +162,8 @@ networks:
     name: irt-network
 
 volumes:
+  irt-incident-data:
+    name: irt-incident-data
   irt-postgres-data:
     name: irt-postgres-data
   irt-prometheus-data:

@@ -7,7 +7,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from .base import DiagnosticError, DiagnosticSnapshot
+from app.domain.diagnostics import DiagnosticError, DiagnosticSnapshot
 
 
 _QUERIES: dict[str, tuple[tuple[str, str], ...]] = {
