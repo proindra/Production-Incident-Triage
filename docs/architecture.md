@@ -59,8 +59,9 @@ text. The graph is bounded by an eight-tool-call limit, one retry, and the RQ
 
 Severity, routing, and recommended actions remain deterministic. With
 `RAG_ENABLED=false` and `AGENT_TOOL_SELECTION_ENABLED=false`, the service makes
-no model calls. In RAG mode, the worker uses local FastEmbed embeddings with a
-persistent FAISS index and calls Groq to generate a short, cited summary.
+no model calls. In RAG mode, the worker uses local Sentence Transformers
+embeddings with a persistent FAISS index and calls Groq to generate a short,
+cited summary.
 Model-selected tool use is separately gated by
 `AGENT_TOOL_SELECTION_ENABLED`; it is bounded and cannot change the deterministic
 policy or perform remediation. Local lexical input/output safety checks are

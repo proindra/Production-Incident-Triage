@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastembed import TextEmbedding
 from langchain_groq import ChatGroq
 
 from app.domain.rag import RAGGeneration
 from app.domain.schemas import RunbookReference
 from app.infrastructure.rag.config import RAGSettings
+from app.infrastructure.rag.embeddings import SentenceTransformerEmbeddings
 from app.infrastructure.rag.node.generate_summary import GroqSummaryGenerator
 from app.infrastructure.rag.vectorstore import FAISSRunbookStore
 from app.infrastructure.llm.resilience import ProviderResilience
@@ -39,9 +39,9 @@ class RunbookRAG:
         if not embedding_model or not api_key or not groq_model:
             raise ValueError("RAG generation settings are incomplete.")
         settings.embedding_cache_path.mkdir(parents=True, exist_ok=True)
-        embeddings = TextEmbedding(
-            model_name=embedding_model,
-            cache_dir=str(settings.embedding_cache_path),
+        embeddings = SentenceTransformerEmbeddings(
+            embedding_model,
+            settings.embedding_cache_path,
         )
         store = FAISSRunbookStore(
             settings.index_path,

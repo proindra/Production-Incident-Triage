@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Language-Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/Agents-LangGraph-1C3C3C?style=for-the-badge" alt="LangGraph">
   <img src="https://img.shields.io/badge/RAG-FAISS-00599C?style=for-the-badge" alt="FAISS">
-  <img src="https://img.shields.io/badge/Embeddings-FastEmbed-3B82F6?style=for-the-badge" alt="FastEmbed">
+  <img src="https://img.shields.io/badge/Embeddings-Sentence%20Transformers-3B82F6?style=for-the-badge" alt="Sentence Transformers">
   <img src="https://img.shields.io/badge/Models-Hugging%20Face%20compatible-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face-compatible models">
   <img src="https://img.shields.io/badge/LLM-Groq%20optional-F55036?style=for-the-badge" alt="Optional Groq">
   <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
@@ -317,9 +317,10 @@ docker compose up --build --scale agent-worker=3
 
 The default remains deterministic and makes no Groq requests. To enable the
 RAG path, copy `.env.example` to `.env` and set `RAG_ENABLED=true`,
-`GROQ_API_KEY`, `GROQ_MODEL`, and `RAG_EMBEDDING_MODEL` to values you select
-from the provider and embedding runtime. The key and model names are runtime
-configuration and must not be committed. Compose passes the Groq key to worker
+`GROQ_API_KEY`, and `GROQ_MODEL`. The default embedding model is
+`sentence-transformers/all-MiniLM-L6-v2`; change `RAG_EMBEDDING_MODEL` to use
+another Sentence Transformers-compatible model. The key and any private model
+configuration must not be committed. Compose passes the Groq key to worker
 containers only.
 
 Build the local FAISS index before starting RAG workers:
@@ -334,12 +335,13 @@ docker compose up --build -d --scale agent-worker=3
 ```
 
 Ingestion preserves Markdown headings and chunks each runbook into
-approximately `RAG_CHUNK_SIZE`-character passages. FastEmbed creates local
+approximately `RAG_CHUNK_SIZE`-character passages. Sentence Transformers
+downloads the configured model from Hugging Face on first use and creates local
 embeddings; normalized vectors are searched by cosine similarity through
 FAISS. The fetch step adds selected official PostgreSQL 17 documentation
 sources to the index in addition to the three project runbooks. Re-running
 ingestion embeds only changed/new passages, removes deleted ones, and rebuilds
-all vectors only if the embedding model changes. The model files and index are
+all vectors only if the embedding model changes. The model cache and index are
 stored under the shared `/data` volume.
 
 The LangGraph search tool uses FAISS in RAG mode. Groq generates a short
@@ -366,9 +368,10 @@ service is deterministic and does not contact Groq.
 
 The evaluator runs on the host and uses the local `data/postgresql` and
 `data/faiss` paths; the Compose index is stored in a separate named volume.
-Export `GROQ_API_KEY`, `GROQ_MODEL`, and `RAG_EMBEDDING_MODEL` into the current
-PowerShell session (a local `.env` file is loaded by Compose, not by `uv run`),
-then fetch and index the corpus locally and compare the versioned prompts:
+Export `GROQ_API_KEY` and `GROQ_MODEL` into the current PowerShell session (a
+local `.env` file is loaded by Compose, not by `uv run`). The default
+`RAG_EMBEDDING_MODEL` is used unless you override it. Then fetch and index the
+corpus locally and compare the versioned prompts:
 
 ```powershell
 uv run --locked python -m app.infrastructure.rag.document_ingestion.fetch_docs --version 17 --destination data/postgresql

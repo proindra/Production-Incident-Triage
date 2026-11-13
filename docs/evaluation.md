@@ -119,10 +119,10 @@ uv run --locked python -m app.infrastructure.rag.document_ingestion
 uv run --locked python -m scripts.evaluate_rag --output results/rag-evaluation.json
 ```
 
-Set `GROQ_API_KEY`, `GROQ_MODEL`, and `RAG_EMBEDDING_MODEL` in the current
-shell first. The host-side `uv run` command does not load values from `.env`;
-Compose loads that file for containers. Any custom `GROQ_BASE_URL` must be
-reachable from the host running the evaluator.
+Set `GROQ_API_KEY` and `GROQ_MODEL` in the current shell first. The default
+`RAG_EMBEDDING_MODEL` is used unless overridden. The host-side `uv run` command
+does not load values from `.env`; Compose loads that file for containers. Any
+custom `GROQ_BASE_URL` must be reachable from the host running the evaluator.
 The evaluation makes model calls for supported cases for both prompt versions;
 provider usage and cost depend on the selected model and configured pricing.
 `GROQ_BASE_URL` can point to an OpenAI-compatible test endpoint. The JSON

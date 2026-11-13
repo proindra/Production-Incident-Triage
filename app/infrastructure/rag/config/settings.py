@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
 
 @dataclass(frozen=True)
 class RAGSettings:
@@ -61,14 +63,16 @@ class RAGSettings:
             circuit_reset_seconds=_read_float(
                 "MODEL_CIRCUIT_RESET_SECONDS", default=30.0, minimum=1.0, maximum=600.0
             ),
-            embedding_model=_read_optional("RAG_EMBEDDING_MODEL"),
+            embedding_model=(
+                _read_optional("RAG_EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL
+            ),
             runbooks_path=Path(os.getenv("RUNBOOKS_PATH", "corpus/runbooks")),
             postgres_docs_path=Path(
                 os.getenv("POSTGRES_DOCS_PATH", "data/postgresql")
             ),
             index_path=Path(os.getenv("FAISS_INDEX_PATH", "data/faiss")),
             embedding_cache_path=Path(
-                os.getenv("FASTEMBED_CACHE_DIR", "data/fastembed")
+                os.getenv("EMBEDDING_CACHE_DIR", "data/embeddings")
             ),
             top_k=_read_int("RAG_TOP_K", default=4, minimum=1, maximum=10),
             chunk_size=_read_int(

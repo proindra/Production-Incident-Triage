@@ -8,6 +8,8 @@ from app.domain.rag import RAGGeneration, RAGGenerationError
 from app.domain.schemas import RunbookReference, TriageRequest
 from app.infrastructure.rag.document_ingestion.loader import load_runbook_chunks
 from app.infrastructure.rag.config import RAGSettings
+from app.infrastructure.rag import embeddings as embeddings_module
+from app.infrastructure.rag.embeddings import SentenceTransformerEmbeddings
 from app.infrastructure.rag.graph_builder.service import RunbookRAG
 from app.infrastructure.rag.node.generate_summary import (
     GroqSummaryGenerator,
@@ -40,6 +42,47 @@ def _vector(text: str) -> np.ndarray:
         ],
         dtype=np.float32,
     )
+
+
+def test_sentence_transformer_embeddings_encode_documents_and_queries(
+    monkeypatch, tmp_path
+) -> None:
+    class FakeSentenceTransformer:
+        def __init__(self, model_name: str, cache_folder: str) -> None:
+            assert model_name == "sentence-transformers/all-MiniLM-L6-v2"
+            assert cache_folder == str(tmp_path)
+
+        def encode(
+            self,
+            texts: list[str],
+            convert_to_numpy: bool,
+            show_progress_bar: bool,
+        ) -> np.ndarray:
+            assert convert_to_numpy
+            assert not show_progress_bar
+            return np.asarray([_vector(text) for text in texts])
+
+    monkeypatch.setattr(
+        embeddings_module, "SentenceTransformer", FakeSentenceTransformer
+    )
+    embeddings = SentenceTransformerEmbeddings(
+        "sentence-transformers/all-MiniLM-L6-v2",
+        tmp_path,
+    )
+
+    documents = embeddings.embed(["WAL retention"])
+    query = embeddings.query_embed("disk growth")
+
+    assert documents.shape == (1, 4)
+    assert query.shape == (1, 4)
+
+
+def test_rag_settings_default_to_sentence_transformer_model(monkeypatch) -> None:
+    monkeypatch.delenv("RAG_EMBEDDING_MODEL", raising=False)
+
+    settings = RAGSettings.from_environment()
+
+    assert settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
 
 
 def test_faiss_index_updates_only_changed_runbook_chunks(tmp_path) -> None:
