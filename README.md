@@ -250,10 +250,23 @@ docker compose up --build
 
 The default setup needs no `.env` file, Groq key, or database URL. It uses
 synthetic or replayed alerts and deterministic diagnostics; RAG and
-model-selected tools are disabled until configured. Compose starts the API,
-Redis/RQ, worker, local model stub, Redis exporter, Prometheus, Grafana,
-cAdvisor, and Jaeger. No live database or external monitoring target is
-connected.
+model-selected tools are disabled until configured. Docker Compose defines
+nine services and starts nine containers with the default single worker:
+
+| Compose service | Purpose |
+|---|---|
+| `api` | FastAPI endpoints and web UI. |
+| `agent-worker` | Processes queued triage runs; one replica by default. |
+| `redis` | RQ job queue and shared runtime state. |
+| `model-stub` | Local OpenAI-compatible model stub for testing. |
+| `irt-redis-exporter` | Exports Redis metrics to Prometheus. |
+| `cadvisor` | Reports container resource and uptime metrics. |
+| `irt-prometheus` | Scrapes and stores metrics. |
+| `irt-grafana` | Displays metrics dashboards. |
+| `jaeger` | Receives and displays OpenTelemetry traces. |
+
+Scaling `agent-worker` to three replicas brings the total to 11 containers.
+No live database or external monitoring target is connected.
 
 Open the UI at <http://127.0.0.1:8000/> or the API docs at
 <http://127.0.0.1:8000/docs>. `GET /health` checks that the API process is
@@ -317,7 +330,8 @@ docker compose up --build --scale agent-worker=3
 
 The default remains deterministic and makes no Groq requests. To enable the
 RAG path, copy `.env.example` to `.env` and set `RAG_ENABLED=true`,
-`GROQ_API_KEY`, and `GROQ_MODEL`. The default embedding model is
+`GROQ_API_KEY`; the default Groq model is `openai/gpt-oss-120b`. Change
+`GROQ_MODEL` to use another supported Groq model. The default embedding model is
 `sentence-transformers/all-MiniLM-L6-v2`; change `RAG_EMBEDDING_MODEL` to use
 another Sentence Transformers-compatible model. The key and any private model
 configuration must not be committed. Compose passes the Groq key to worker
