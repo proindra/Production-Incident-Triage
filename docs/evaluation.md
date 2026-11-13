@@ -68,6 +68,9 @@ submit-to-result p95 by that amount. No LLM is called, so model spend is
 The deterministic suite in `tests/test_evaluation.py` covers these 20 cases.
 The expected outcomes are asserted in every case. The tests use only synthetic
 or replayed data and make no live-system connections.
+The same case definitions in `evaluation/scenarios.json` carry expected
+category/severity outcomes and the supporting source filename/heading; those
+source/heading pairs identify the gold passages used to assess retrieval.
 
 Latest validation: see the current test and container checks recorded at task
 completion. These unit/integration cases do not substitute for the Locust
@@ -129,17 +132,22 @@ are used to score retrieval precision but are not sent for summary generation.
 
 Metric definitions and limitations:
 
-- **Context relevance** is exact retrieval accuracy for the expected source
-  filename and heading (and expects no passages for unsupported/irrelevant
-  cases).
-- **Groundedness** is the fraction of generated content sentences with at least
-  one non-trivial word present in a retrieved excerpt.
-- **Faithfulness** is the fraction of non-trivial summary words also present
-  in retrieved excerpts; **hallucination rate** is one minus that score.
-  These are reproducible lexical proxies, not semantic judgments or a
-  substitute for human review.
-- **Citation validity** checks that citations point to retrieved references.
-  The generator independently rejects missing or out-of-context citations.
+- **Context relevance** is the mean of a per-case exact-match indicator: 1 if
+  any retrieved reference matches the expected source filename and heading,
+  otherwise 0. For unsupported/irrelevant cases, it is 1 only when no passage
+  is retrieved.
+- **Groundedness** is supported content sentences divided by all content
+  sentences. A sentence is supported when it shares at least one non-trivial
+  token with a retrieved excerpt.
+- **Faithfulness** is the number of distinct non-trivial summary tokens also
+  present in retrieved excerpts divided by the number of distinct non-trivial
+  summary tokens. **Hallucination rate** is `1 - faithfulness`. These are
+  reproducible lexical proxies, not semantic judgments or a substitute for
+  human review.
+- **Citation validity** is the mean per-summary indicator: 1 when the answer
+  has at least one citation and every citation points to a retrieved reference,
+  otherwise 0. Generation failures count as invalid; unsupported cases that
+  are not sent for generation are excluded.
 - Generation failures are counted separately and excluded from groundedness,
   faithfulness, and hallucination averages; they count as invalid citations.
 
@@ -147,6 +155,14 @@ The JSON `comparison` section reports each metric before (v1), after (v2), the
 absolute score delta, and which prompt scored better. Higher is better for
 context relevance, groundedness, faithfulness, and citation validity; lower is
 better for hallucination rate. An exact tie is reported as `tie`.
+
+Both prompt versions run on the same fixed scenario set. The RAG evaluator
+checks retrieval using each scenario's expected source/heading and scores
+generated summaries against retrieved evidence passages; it does not use FAISS
+to judge answer quality. Expected category/severity outcomes are asserted by
+the deterministic 20-case evaluation suite described above. Thus retrieval
+quality and generated-answer grounding are reported separately from
+deterministic triage outcome checks.
 
 The evaluator emits actual scores only when run against a configured model and
 index. Unit tests validate the scoring and report workflow but are not presented

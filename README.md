@@ -164,23 +164,44 @@ queue wait. cAdvisor supplies container uptime and resource metrics.
 flowchart LR
     Docs[Selected PostgreSQL documentation]
     Runbooks[Three project runbooks]
-    Ingest[Offline ingestion<br/>Chunk and embed]
+    Ingest[Offline ingestion<br/>Chunk, hash, and embed]
     Index[Persistent FAISS index]
-    Scenarios[20 evaluation scenarios<br/>Expected outcomes and source passages]
-    Prompts[Versioned prompts<br/>Before and after deliberate change]
-    Evaluator[Offline evaluation pipeline]
-    Metrics[Comparison report<br/>Context relevance, groundedness,<br/>faithfulness, hallucination rate,<br/>citation validity]
+    Metadata[Index freshness metadata<br/>Build time, chunk count,<br/>update duration and throughput]
+    Update[Idempotent incremental update<br/>Re-embed added/changed chunks only]
+    Scenarios[20 fixed evaluation scenarios<br/>Expected triage outcomes and gold<br/>source/heading passage locators]
+    Retrieval[Retrieval evaluation<br/>Compare retrieved source/heading<br/>with each expected passage]
+    Prompts[Versioned prompts<br/>Before/after deliberate prompt change<br/>same evaluation set]
+    Generate[Generate answers from retrieved passages]
+    Answer[Answer evaluation<br/>Score generated answers against<br/>supporting evidence passages]
+    Outcomes[Outcome checks<br/>Compare triage results with<br/>expected category and severity]
+    Metrics[Before/after report<br/>Metric calculations and deltas]
 
     Docs --> Ingest
-    Runbooks --> Ingest --> Index
-    Scenarios --> Evaluator
-    Prompts --> Evaluator
-    Index --> Evaluator
-    Evaluator --> Metrics
+    Runbooks --> Ingest
+    Ingest --> Update --> Index
+    Update --> Metadata
+    Index --> Retrieval
+    Scenarios --> Retrieval
+    Retrieval --> Generate
+    Scenarios --> Generate
+    Prompts --> Generate
+    Generate --> Answer
+    Scenarios --> Outcomes
+    Answer --> Metrics
+    Retrieval --> Metrics
+    Outcomes --> Metrics
 ```
 
 The three diagrams separate the request path from observability and offline
 development; ingestion and evaluation do not run on an incident request.
+The retrieval evaluator uses the corpus/index to check whether the expected
+source passage was retrieved. Generated summaries are scored against retrieved
+evidence passages, while the deterministic scenario suite checks expected
+triage outcomes; the FAISS index is not an answer evaluator. Index metadata
+records freshness and indexing statistics, and unchanged chunks keep their
+existing embeddings. See
+[docs/evaluation.md](docs/evaluation.md) for metric definitions and report
+interpretation.
 
 ### Runtime design notes
 
