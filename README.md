@@ -269,19 +269,91 @@ documented in [docs/architecture.md](docs/architecture.md) and
 
 ## Getting started
 
-Requirements: Git, Docker, and Docker Compose. Clone the repository and start
-the services:
+### Phase 1 - Clone the project
+
+#### 1. Check prerequisites
+
+Install Git, Visual Studio Code, and Docker Desktop for Windows. Docker Desktop
+includes Docker Compose. In PowerShell, check that the commands are available:
 
 ```powershell
+git --version
+docker --version
+docker compose version
+```
+
+Start Docker Desktop before continuing.
+
+#### 2. Clone the repository
+
+In PowerShell, change to the parent folder where you want the project, then
+clone it:
+
+```powershell
+Set-Location "$HOME\Desktop"
 git clone https://github.com/proindra/Production-Incident-Triage.git
 Set-Location Production-Incident-Triage
+```
+
+If your Desktop is in a different location, use that path instead. The current
+directory should be the repository root, containing `docker-compose.yml`,
+`Dockerfile`, and `pyproject.toml` (not just the `app` folder).
+
+### Phase 2 - Open the project in VS Code
+
+#### 3. Open the repository root
+
+```powershell
+code .
+```
+
+If the `code` command is unavailable, open VS Code and use **File > Open Folder**
+to select the repository root. In VS Code, choose **Terminal > New Terminal**.
+The terminal should start in the root directory; check with:
+
+```powershell
+Get-Location
+```
+
+### Phase 3 - Build and start the application
+
+#### 4. Configure environment variables
+
+For the default demo, creating `.env` is optional. The application runs
+deterministically without a Groq API key; RAG and model-selected tools are
+disabled by default. To create a local configuration file for later edits:
+
+```powershell
+if (-not (Test-Path .env)) {
+    Copy-Item .env.example .env
+}
+```
+
+Keep the default settings for the first run. Do not commit `.env`; it may
+contain local credentials.
+
+#### 5. Build and start Docker services
+
+From the repository root, run:
+
+```powershell
 docker compose up --build
 ```
 
-The default setup needs no `.env` file, Groq key, or database URL. It uses
-synthetic or replayed alerts and deterministic diagnostics; RAG and
-model-selected tools are disabled until configured. Docker Compose defines
-nine services and starts nine containers with the default single worker:
+This builds the application image and starts the configured services. Keep this
+terminal open while using the application. Compose waits for required
+dependencies, such as healthy Redis, before starting dependent services.
+
+#### 6. Verify the services
+
+Open a second VS Code terminal in the repository root and run:
+
+```powershell
+docker compose ps
+docker compose config --services
+```
+
+The default Compose project defines nine services and starts nine containers:
 
 | Compose service | Purpose |
 |---|---|
@@ -295,72 +367,89 @@ nine services and starts nine containers with the default single worker:
 | `irt-grafana` | Displays metrics dashboards. |
 | `jaeger` | Receives and displays OpenTelemetry traces. |
 
-Scaling `agent-worker` to three replicas brings the total to 11 containers.
-No live database or external monitoring target is connected.
+The API, Redis, worker, and model stub have health checks. Other services may
+show as running without a `healthy` status. `irt-prometheus` is the Prometheus
+service and `irt-grafana` is the Grafana service. No live database or external
+monitoring target is connected.
 
-Open the UI at <http://127.0.0.1:8000/> or the API docs at
-<http://127.0.0.1:8000/docs>. `GET /health` checks that the API process is
-responsive; `/metrics` exposes API metrics. `POST /incidents/triage` returns
-`202 Accepted` with a `run_id`. Poll the returned `status_url` until the run is
-finished or failed. The worker verifies citations before returning a
-recommendation and escalates instead of returning an unsupported answer.
-`GET /ready` checks Redis availability; `GET /health` checks API liveness.
+### Phase 4 - Open the application
 
-To try the difficult WAL-retention scenario in the UI, enter this incident
-description and context. The equivalent backwards-compatible API request is:
+#### 7. Open the web interface
 
-```json
-{
-  "incident_description": "Disk usage on the primary is climbing steadily. Table and index sizes are not growing. Disk filling, cause unknown.",
-  "context": {
-    "disk_used_percent": 88,
-    "disk_growth": "increasing",
-    "table_index_sizes": "stable"
-  }
-}
-```
+Open the [web interface](http://localhost:8000/) to submit an incident, or the
+[API documentation](http://localhost:8000/docs) to inspect and call the API.
 
-Expect disk/WAL triage with medium severity. WAL retention should be described
-as a possible cause, not a confirmed one; the supplied metrics are synthetic
-and no live diagnostic checks are performed.
+### Phase 5 - Submit and follow a synthetic incident
 
-The API also accepts a structured synthetic alert payload with an explicit
-on-call note:
+#### 8. Choose a sample incident
 
-```json
-{
-  "alert": {
-    "incident_type": "disk_usage_increasing",
-    "database": "app_db",
-    "environment": "demo",
-    "postgres_version": "17",
-    "metrics": {
-      "disk_used_percent": 88,
-      "disk_growth": "increasing",
-      "table_index_sizes": "stable"
-    }
-  },
-  "on_call_note": "Disk filling; table and index sizes are stable."
-}
-```
+In the web interface, select **Disk usage increasing** from the Synthetic Alert
+Generator and click **Analyze incident**. The form fills in a synthetic
+description and context. This is a demo scenario; it does not connect to a
+production database or run live diagnostics.
 
-Malformed payloads receive field-level `422` errors and a quarantine ID; they
-are persisted and do not enter the queue. The response includes observed facts,
-hypotheses, recommendations, citation-verification outcome, severity, route,
-and agent/tool trace. Context fields and numeric ranges are validated and
-bounded. `RUNBOOKS_PATH` is honored by the worker.
+#### 9. Understand the processing flow
 
-Scale the worker replicas with:
+1. FastAPI validates the request and puts a job on the Redis/RQ queue.
+2. One available `agent-worker` picks up the job.
+3. Agent 1 investigates and gathers evidence; Agent 2 verifies the proposed
+   assessment and its citations.
+4. Severity and routing are determined by deterministic policy.
+5. The result is recorded in SQLite and made available through the run-status
+   endpoint.
+
+#### 10. Retrieve the result
+
+The web interface polls for the result automatically. For a direct API request,
+`POST /incidents/triage` returns `202 Accepted` with a `run_id` and `status_url`.
+Poll the returned `status_url` until its status is `finished` or `failed`. The
+status endpoint is `GET /incidents/runs/{run_id}`; when finished, the response
+includes the result. `GET /health` checks API liveness, and `GET /ready` checks
+Redis availability.
+
+### Phase 6 - Check monitoring
+
+After starting the services, open:
+
+- Grafana: <http://localhost:2028>
+- Prometheus: <http://localhost:2027>
+- Jaeger: <http://localhost:2030>
+
+These services provide dashboards, metrics, and traces.
+
+### Phase 7 - Optionally scale workers
+
+Each worker replica runs the complete two-agent workflow for one incident at a
+time. To run three identical worker replicas, open another terminal in the
+repository root and run:
 
 ```powershell
-docker compose up --build --scale agent-worker=3
+docker compose up -d --scale agent-worker=3
 ```
+
+This allows up to three incidents to be processed concurrently; additional
+jobs wait in Redis. The three replicas bring the total Compose container count
+to 11.
+
+### Phase 8 - Stop the application
+
+Run this from the repository root when finished:
+
+```powershell
+docker compose down
+```
+
+This stops and removes the containers and network but preserves named volumes,
+including incident history. Do not add `--volumes` if you want to keep that
+data.
 
 ## Optional Groq and FAISS RAG
 
 The default remains deterministic and makes no Groq requests. To enable the
-RAG path, copy `.env.example` to `.env` and set `RAG_ENABLED=true`,
-`GROQ_API_KEY`; the default Groq model is `openai/gpt-oss-120b`. Change
+RAG path, set `RAG_ENABLED=true` and `GROQ_API_KEY` in `.env`. If `.env` does
+not exist, create it from `.env.example` using the command in the getting
+started section; otherwise, edit the existing file so local settings are not
+overwritten. The default Groq model is `openai/gpt-oss-120b`. Change
 `GROQ_MODEL` to use another supported Groq model. The default embedding model is
 `sentence-transformers/all-MiniLM-L6-v2`; change `RAG_EMBEDDING_MODEL` to use
 another Sentence Transformers-compatible model. The key and any private model
