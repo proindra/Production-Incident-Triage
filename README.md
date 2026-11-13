@@ -351,8 +351,9 @@ docker compose up --build -d --scale agent-worker=3
 Ingestion preserves Markdown headings and chunks each runbook into
 approximately `RAG_CHUNK_SIZE`-character passages. Sentence Transformers
 downloads the configured model from Hugging Face on first use and creates local
-embeddings; normalized vectors are searched by cosine similarity through
-FAISS. The fetch step adds selected official PostgreSQL 17 documentation
+embeddings using CPU-only PyTorch (no GPU/CUDA runtime required); normalized
+vectors are searched by cosine similarity through FAISS. The fetch step adds
+selected official PostgreSQL 17 documentation
 sources to the index in addition to the three project runbooks. Re-running
 ingestion embeds only changed/new passages, removes deleted ones, and rebuilds
 all vectors only if the embedding model changes. The model cache and index are
@@ -411,11 +412,25 @@ payload.
 
 ## Monitoring stack
 
-The supplied Compose and Prometheus files are the local development setup.
-They expose the API at `localhost:8000`, Prometheus at `localhost:2027`,
-Grafana at `localhost:2028`, and Jaeger at `localhost:2030`. Metrics cover the
-triage service and local container/queue health; PostgreSQL metrics are not
-scraped.
+The supplied Compose and Prometheus files provide local metrics, dashboards,
+and tracing. Prometheus scrapes every 15 seconds.
+
+| Component | Local address | Purpose |
+|---|---|---|
+| Triage API | <http://localhost:8000/metrics> | Application request and triage metrics. |
+| Prometheus | <http://localhost:2027/targets> | Metrics UI and scrape-target health. |
+| Grafana | <http://localhost:2028> | Dashboards for API, worker, queue, and container metrics. |
+| Jaeger | <http://localhost:2030> | OpenTelemetry trace UI. |
+| cAdvisor | <http://localhost:2031/metrics> | Container resource and uptime metrics. |
+
+Redis Exporter (`irt-redis-exporter:9121`) and the model stub
+(`model-stub:8010`) are internal to the Compose network and are not published
+on host ports.
+
+The configured Prometheus scrape jobs cover the API, Prometheus itself, Redis
+Exporter, Jaeger, Grafana, cAdvisor, and the model stub. PostgreSQL metrics
+are not scraped; this application does not connect to a live PostgreSQL
+instance.
 
 ### Local container access and credentials
 
@@ -434,8 +449,8 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Check <http://localhost:2027/targets> for the configured local service scrape
-targets. Traces are available in Jaeger at <http://localhost:2030>. In Grafana, add a
+Check <http://localhost:2027/targets> for the configured local scrape targets.
+Traces are available in Jaeger at <http://localhost:2030>. In Grafana, add a
 Prometheus data source with URL `http://irt-prometheus:9090` (Grafana must use
 the container-network URL, not `localhost:2027`).
 The checked-in dashboard at
