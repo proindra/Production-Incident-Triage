@@ -162,9 +162,9 @@ queue wait. cAdvisor supplies container uptime and resource metrics.
 
 ```mermaid
 flowchart LR
-    Docs[Selected PostgreSQL documentation]
-    Runbooks[Three project runbooks]
-    Ingest[Offline ingestion<br/>Chunk, hash, and embed]
+    Docs[Three selected PostgreSQL 17 pages<br/>monitoring-stats.md<br/>runtime-config-wal.md<br/>warm-standby.md]
+    Runbooks[Three project runbooks<br/>disk_usage_wal_retention.md<br/>high_database_latency.md<br/>too_many_connections.md]
+    Ingest[Offline ingestion<br/>Heading-aware chunks ~1,200 chars<br/>Hash and embed]
     Index[Persistent FAISS index]
     Metadata[Index freshness metadata<br/>Build time, chunk count,<br/>update duration and throughput]
     Update[Idempotent incremental update<br/>Re-embed added/changed chunks only]
@@ -348,16 +348,21 @@ docker compose run --rm agent-worker uv run --no-sync python -m app.infrastructu
 docker compose up --build -d --scale agent-worker=3
 ```
 
-Ingestion preserves Markdown headings and chunks each runbook into
-approximately `RAG_CHUNK_SIZE`-character passages. Sentence Transformers
+The indexed corpus is the three selected PostgreSQL 17 pages
+(`monitoring-stats.md`, `runtime-config-wal.md`, and `warm-standby.md`) plus
+the three project runbooks in `corpus/runbooks/`. It does not include the full
+PostgreSQL manual. Ingestion preserves Markdown headings and splits each
+Markdown source into passages of approximately `RAG_CHUNK_SIZE` characters;
+each passage retains its filename and heading metadata.
+
+Sentence Transformers
 downloads the configured model from Hugging Face on first use and creates local
 embeddings using CPU-only PyTorch (no GPU/CUDA runtime required); normalized
 vectors are searched by cosine similarity through FAISS. The fetch step adds
-selected official PostgreSQL 17 documentation
-sources to the index in addition to the three project runbooks. Re-running
-ingestion embeds only changed/new passages, removes deleted ones, and rebuilds
-all vectors only if the embedding model changes. The model cache and index are
-stored under the shared `/data` volume.
+those selected official PostgreSQL 17 documentation pages to the index.
+Re-running ingestion embeds only changed/new passages, removes deleted ones,
+and rebuilds all vectors only if the embedding model changes. The model cache
+and index are stored under the shared `/data` volume.
 
 The LangGraph search tool uses FAISS in RAG mode. Groq generates a short
 summary from retrieved passages; source citations are checked, and deterministic
