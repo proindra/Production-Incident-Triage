@@ -138,6 +138,8 @@ def test_ui_page_loads() -> None:
     assert "Incident Runbook Triage" in response.text
     assert "Synthetic Alert Generator" in response.text
     assert "No live systems are connected" in response.text
+    assert r'"\nFeedback recorded."' in response.text
+    assert r'"\nCould not submit feedback."' in response.text
 
 
 def test_triage_request_requires_non_blank_incident_description() -> None:

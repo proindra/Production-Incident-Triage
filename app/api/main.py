@@ -538,9 +538,9 @@ _PAGE = """<!doctype html>
         });
         const result = await response.json();
         document.getElementById("result").textContent +=
-          response.ok ? "\nFeedback recorded." : `\nFeedback error: ${JSON.stringify(result)}`;
+          response.ok ? "\\nFeedback recorded." : `\\nFeedback error: ${JSON.stringify(result)}`;
       } catch {
-        document.getElementById("result").textContent += "\nCould not submit feedback.";
+        document.getElementById("result").textContent += "\\nCould not submit feedback.";
       }
     });
   </script>
