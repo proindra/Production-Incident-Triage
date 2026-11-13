@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Embeddings-Sentence%20Transformers-3B82F6?style=for-the-badge" alt="Sentence Transformers">
   <img src="https://img.shields.io/badge/Models-Hugging%20Face%20compatible-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face-compatible models">
   <img src="https://img.shields.io/badge/LLM-Groq%20optional-F55036?style=for-the-badge" alt="Optional Groq">
-  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Database-SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite incident history">
   <img src="https://img.shields.io/badge/Queue-Redis%20%2F%20RQ-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis and RQ">
   <img src="https://img.shields.io/badge/Containers-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose">
   <img src="https://img.shields.io/badge/Metrics-Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus">
