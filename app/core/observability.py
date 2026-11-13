@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Iterator
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+_correlation_id: ContextVar[str | None] = ContextVar(
+    "incident_triage_correlation_id", default=None
+)
+
+
+@contextmanager
+def correlation_context(correlation_id: str) -> Iterator[None]:
+    token = _correlation_id.set(correlation_id)
+    try:
+        yield
+    finally:
+        _correlation_id.reset(token)
+
+
+def correlation_attributes() -> dict[str, str]:
+    correlation_id = _correlation_id.get()
+    return {"correlation_id": correlation_id} if correlation_id else {}
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -40,6 +61,10 @@ class JsonLogFormatter(logging.Formatter):
         for field in self._FIELDS:
             if hasattr(record, field):
                 event[field] = getattr(record, field)
+        if "correlation_id" not in event:
+            correlation_id = _correlation_id.get()
+            if correlation_id:
+                event["correlation_id"] = correlation_id
         return json.dumps(event, sort_keys=True, default=str)
 
 

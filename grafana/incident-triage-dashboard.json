@@ -349,6 +349,68 @@
       ],
       "title": "Indexed corpus size",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "id": 18,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "time() - container_start_time_seconds{name!=\"\"}",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Container uptime",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "id": 19,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(incident_triage_agent_steps_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
+          "legendFormat": "steps per successful run",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "rate(incident_triage_tool_calls_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
+          "legendFormat": "tool calls per successful run",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Average steps and tool calls per successful run",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

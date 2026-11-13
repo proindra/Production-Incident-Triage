@@ -13,6 +13,7 @@ from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
 from opentelemetry import trace
 
+from app.core.observability import correlation_attributes
 from app.domain.safety import inspect_untrusted_text, redact_secrets
 from app.domain.rag import RAGGenerationError
 from app.domain.schemas import ModelUsage, RunbookReference, TriageRequest, TriageResponse
@@ -178,7 +179,9 @@ class IncidentTriageGraph:
     def _triage_agent(self, state: AgentState) -> dict[str, Any]:
         started = time.perf_counter()
         try:
-            with self.tracer.start_as_current_span("agent.triage"):
+            with self.tracer.start_as_current_span(
+                "agent.triage", attributes=correlation_attributes()
+            ):
                 result = self._run_triage_agent(state)
         except Exception:
             self._record_agent_metric("triage", "failure", started)
@@ -390,7 +393,9 @@ class IncidentTriageGraph:
                 RunbookReference.model_validate(item)
                 for item in state.get("references", [])
             ]
-            with self.tracer.start_as_current_span("agent.rag_generation"):
+            with self.tracer.start_as_current_span(
+                "agent.rag_generation", attributes=correlation_attributes()
+            ):
                 try:
                     if inspect_untrusted_text(
                         [request.incident_description, request.context, references]
@@ -476,7 +481,9 @@ class IncidentTriageGraph:
     def _verification_agent(self, state: AgentState) -> dict[str, Any]:
         started = time.perf_counter()
         try:
-            with self.tracer.start_as_current_span("agent.verification"):
+            with self.tracer.start_as_current_span(
+                "agent.verification", attributes=correlation_attributes()
+            ):
                 result = self._run_verification_agent(state)
         except Exception:
             self._record_agent_metric("verification", "failure", started)
@@ -585,7 +592,9 @@ class IncidentTriageGraph:
         if len(calls) >= _MAX_TOOL_CALLS:
             return []
         started = time.perf_counter()
-        with self.tracer.start_as_current_span(f"tool.{name}") as span:
+        with self.tracer.start_as_current_span(
+            f"tool.{name}", attributes=correlation_attributes()
+        ) as span:
             result = self.tools[name].invoke(arguments)
             span.set_attribute("tool.name", name)
             span.set_attribute("tool.result_count", len(result) if isinstance(result, list) else 1)

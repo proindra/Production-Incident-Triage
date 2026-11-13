@@ -71,10 +71,17 @@ flowchart LR
     Queue[4. Redis queue and background worker<br/>Asynchronous run]
     Agent1[5. Multi-agent analysis<br/>Agent 1 investigates and gathers evidence]
     Tools[Shared tools<br/>Request lookup, corpus search, clause lookup]
-    Knowledge[6. Runbook knowledge<br/>Three project runbooks and optional RAG]
+    Mode{Retrieval mode}
+    Keyword[Keyword search<br/>Default]
+    FAISS[FAISS semantic search<br/>Optional RAG]
+    Knowledge[6. Runbook knowledge<br/>Three runbooks and indexed documentation]
+    Evidence[Retrieved passages and citations]
     Policy[7. Deterministic severity and routing]
-    Agent2[5. Agent 2 - Verification and routing<br/>Check evidence and citations]
-    Verified{Evidence verified?}
+    Candidate[Proposed cause, severity and steps<br/>with retrieved passages and citations]
+    Agent2[5. Agent 2 - Verification and routing]
+    Verified{Complete recommendation verified?}
+    Retry{Alternate retrieval used?}
+    Alternate[Alternate search strategy<br/>One retry]
     Recommendation[8. Verified recommendation<br/>Citations and safe first-response steps]
     Escalation[Human escalation<br/>Withhold unsupported recommendation]
     Result[9. SQLite history and Redis run status]
@@ -83,14 +90,29 @@ flowchart LR
 
     Alert --> UI --> API --> Queue --> Agent1
     API -. invalid payload .-> Quarantine
-    Agent1 --> Tools
-    Knowledge --> Tools
-    Tools --> Policy --> Agent2 --> Verified
+    Agent1 --> Tools --> Mode
+    Mode -- Default --> Keyword
+    Mode -- RAG enabled --> FAISS
+    Knowledge --> Keyword
+    Knowledge --> FAISS
+    Keyword --> Evidence
+    FAISS --> Evidence
+    Evidence --> Policy --> Candidate --> Agent2 --> Verified
     Verified -- Yes --> Recommendation --> Result
-    Verified -- No --> Escalation --> Result
+    Verified -- No --> Retry
+    Retry -- No --> Alternate --> Evidence
+    Retry -- Yes --> Escalation --> Result
     Result --> Display
     Display -. feedback .-> API
 ```
+
+Agent 2 verifies the complete proposed assessment: cause, severity,
+recommended steps, retrieved passages, and citations. A failed check triggers
+one alternate search and a second verification; if that also fails, the
+unsupported recommendation is withheld and the incident is escalated.
+Keyword search is the default retrieval path; enabling RAG switches corpus
+search to FAISS semantic retrieval. Both are supporting tools used during
+investigation.
 
 ### Diagram 2 - Application observability
 
@@ -98,24 +120,43 @@ flowchart LR
 flowchart LR
     subgraph Runtime[Application runtime]
         API[FastAPI]
-        Worker[Agents and background worker]
+        Agent1[Agent 1 - Investigation]
+        Agent2[Agent 2 - Verification]
+        Worker[Background worker]
         Redis[Redis and RQ]
     end
-    API -. application and latency metrics .-> Prometheus[Prometheus]
+    Agent1 --> AgentMetrics[Redis-backed agent/worker metrics<br/>success, steps, tools, retries, per-step latency]
+    Agent2 --> AgentMetrics
+    Worker --> AgentMetrics
+    AgentMetrics --> APIMetrics[FastAPI /metrics]
+    APIMetrics -. scrape .-> Prometheus[Prometheus]
     RedisExporter[Redis exporter] -. queue metrics .-> Prometheus
-    CAdvisor[cAdvisor] -. container resources .-> Prometheus
+    CAdvisor[cAdvisor] -. container uptime and resources .-> Prometheus
     Prometheus --> Grafana[Grafana dashboards]
-    API -. distributed traces .-> Jaeger[Jaeger]
-    Worker -. distributed traces .-> Jaeger
-    API --> ContainerLogs[Container stdout and stderr]
-    Worker --> ContainerLogs
+    API -. HTTP metrics .-> Prometheus
+    API -. trace context and correlation ID via RQ .-> Worker
+    API -. trace spans .-> Jaeger[Jaeger]
+    Worker -. trace spans .-> Jaeger
+    Agent1 -. trace spans .-> Jaeger
+    Agent2 -. trace spans .-> Jaeger
+    API --> JsonLogs[Structured JSON logs<br/>correlation ID and request/run fields]
+    Agent1 --> JsonLogs
+    Agent2 --> JsonLogs
+    Worker --> JsonLogs
+    JsonLogs --> ContainerLogs[Container stdout and stderr]
     ContainerLogs -. docker compose logs .-> Operator[Developer or operator]
+    Locust[Locust performance test] -. submit-to-result latency .-> E2E[End-to-end latency report]
 ```
 
 Prometheus and Grafana observe the triage application and its infrastructure;
 they do not detect incidents on a live PostgreSQL system. Jaeger receives
 OpenTelemetry traces. Application logs are available from the local Compose
-containers with `docker compose logs`; there is no centralized log backend.
+containers as structured JSON with correlation IDs; view them with
+`docker compose logs`. There is no centralized log backend. Per-agent success
+rates, steps/tool calls per run, verification retry rate, and per-step latency
+are exported through the API metrics endpoint. The worker histogram measures
+worker execution; Locust measures submit-to-final-result latency, including
+queue wait. cAdvisor supplies container uptime and resource metrics.
 
 ### Diagram 3 - Offline LLMOps and evaluation
 

@@ -8,7 +8,11 @@ import time
 from typing import Any
 
 from app.core.config import DEFAULT_SETTINGS
-from app.core.observability import configure_observability
+from app.core.observability import (
+    configure_observability,
+    correlation_attributes,
+    correlation_context,
+)
 from app.domain.schemas import TriageRequest
 from app.infrastructure.diagnostics.mock import MockDiagnostic
 from app.infrastructure.queue.queueing import (
@@ -64,24 +68,31 @@ def process_triage(
     status = "failure"
     parent_context = propagate.extract(trace_context or {})
     try:
-        with tracer.start_as_current_span(
-            "incident.triage",
-            context=parent_context,
-            attributes={"correlation_id": correlation_id},
-        ) as span:
-            result = _process_triage(request_payload, correlation_id)
-            span.set_attribute("rag.status", str(result.get("rag_status", "disabled")))
-            prompt_version = result.get("rag_prompt_version")
-            if isinstance(prompt_version, str):
-                span.set_attribute("rag.prompt_version", prompt_version)
-            prompt_tokens = result.get("rag_prompt_tokens")
-            if isinstance(prompt_tokens, int):
-                span.set_attribute("rag.prompt_tokens", prompt_tokens)
-            completion_tokens = result.get("rag_completion_tokens")
-            if isinstance(completion_tokens, int):
+        with correlation_context(correlation_id):
+            with tracer.start_as_current_span(
+                "incident.triage",
+                context=parent_context,
+                attributes=correlation_attributes(),
+            ) as span:
+                result = _process_triage(request_payload, correlation_id)
                 span.set_attribute(
-                    "rag.completion_tokens", completion_tokens
+                    "rag.status", str(result.get("rag_status", "disabled"))
                 )
+                prompt_version = result.get("rag_prompt_version")
+                if isinstance(prompt_version, str):
+                    span.set_attribute(
+                        "rag.prompt_version", prompt_version
+                    )
+                prompt_tokens = result.get("rag_prompt_tokens")
+                if isinstance(prompt_tokens, int):
+                    span.set_attribute(
+                        "rag.prompt_tokens", prompt_tokens
+                    )
+                completion_tokens = result.get("rag_completion_tokens")
+                if isinstance(completion_tokens, int):
+                    span.set_attribute(
+                        "rag.completion_tokens", completion_tokens
+                    )
         status = "success"
         return result
     finally:

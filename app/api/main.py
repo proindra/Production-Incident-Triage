@@ -19,7 +19,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from uuid import UUID
 
 from app.core.config import DEFAULT_SETTINGS
-from app.core.observability import configure_observability
+from app.core.observability import configure_observability, correlation_context
 from app.domain.schemas import (
     FeedbackAccepted,
     FeedbackRequest,
@@ -62,7 +62,8 @@ async def observe_request(request: Request, call_next) -> Response:
     request.state.correlation_id = correlation_id
     trace.get_current_span().set_attribute("correlation_id", correlation_id)
     started = time.perf_counter()
-    response = await call_next(request)
+    with correlation_context(correlation_id):
+        response = await call_next(request)
     elapsed = time.perf_counter() - started
     route = getattr(request.scope.get("route"), "path", "unmatched")
     REQUESTS.labels(request.method, route, str(response.status_code)).inc()
