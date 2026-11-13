@@ -114,6 +114,36 @@ Keyword search is the default retrieval path; enabling RAG switches corpus
 search to FAISS semantic retrieval. Both are supporting tools used during
 investigation.
 
+### Two agents, three worker replicas
+
+The two agents are workflow specialists that collaborate on **one incident**.
+The three `agent-worker` containers are identical processing replicas; they are
+not additional agents and do not have different specialties.
+
+| Agent | Responsibility |
+|---|---|
+| Agent 1 - Investigation | Interprets the incident, searches documentation and gathers evidence for a proposed assessment. |
+| Agent 2 - Verification | Checks the proposed cause, severity, recommended steps, retrieved passages, and citations. It requests one alternate search if needed and escalates if the recommendation remains unsupported. |
+
+Severity and routing are determined by the application's deterministic policy;
+Agent 2 verifies the proposed assessment rather than independently choosing
+severity or routing.
+
+Each worker listens to the same Redis `triage` queue. One worker takes a job and
+runs the complete Agent 1 -> Agent 2 workflow; one incident is not split across
+workers. With three replicas, up to three incidents can be processed at once:
+
+| Worker replica | Example job | Workflow |
+|---|---|---|
+| Worker 1 | Incident 1 | Agent 1 -> Agent 2 |
+| Worker 2 | Incident 2 | Agent 1 -> Agent 2 |
+| Worker 3 | Incident 3 | Agent 1 -> Agent 2 |
+
+For five incoming incidents, three are processed by the available workers and
+the other two wait in Redis. As a worker finishes, it takes the next available
+job. The worker numbers and incident assignments are illustrative; Redis/RQ
+does not guarantee a particular replica-to-incident assignment.
+
 ### Diagram 2 - Application observability
 
 ```mermaid
