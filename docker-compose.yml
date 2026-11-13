@@ -78,7 +78,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-}
       REDIS_URL: redis://redis:6379/0
       INCIDENT_DB_PATH: /data/incidents.db
       RUNBOOKS_PATH: ${RUNBOOKS_PATH:-/service/corpus/runbooks}
@@ -111,7 +110,6 @@ services:
     command:
       ["uv", "run", "--no-sync", "rq", "worker", "triage", "--url", "redis://redis:6379/0"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:-}
       REDIS_URL: redis://redis:6379/0
       INCIDENT_DB_PATH: /data/incidents.db
       RUNBOOKS_PATH: ${RUNBOOKS_PATH:-/service/corpus/runbooks}
@@ -160,26 +158,6 @@ services:
     networks:
       - irt-network
 
-  irt-postgres:
-    image: postgres:17
-    container_name: irt-postgres
-    environment:
-      POSTGRES_DB: incidentdb
-      POSTGRES_USER: incident_user
-      POSTGRES_PASSWORD: local_dev_password
-    ports:
-      - "2026:5432"
-    volumes:
-      - irt-postgres-data:/var/lib/postgresql/data
-    command: ["postgres", "-c", "wal_level=logical"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U incident_user -d incidentdb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - irt-network
-
   irt-prometheus:
     image: prom/prometheus
     container_name: irt-prometheus
@@ -191,8 +169,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      irt-postgres-exporter:
-        condition: service_started
       irt-redis-exporter:
         condition: service_started
       cadvisor:
@@ -216,19 +192,6 @@ services:
     networks:
       - irt-network
 
-  irt-postgres-exporter:
-    image: prometheuscommunity/postgres-exporter
-    container_name: irt-postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://incident_user:local_dev_password@irt-postgres:5432/incidentdb?sslmode=disable"
-    ports:
-      - "2029:9187"
-    depends_on:
-      irt-postgres:
-        condition: service_healthy
-    networks:
-      - irt-network
-
 networks:
   irt-network:
     name: irt-network
@@ -236,8 +199,6 @@ networks:
 volumes:
   irt-incident-data:
     name: irt-incident-data
-  irt-postgres-data:
-    name: irt-postgres-data
   irt-prometheus-data:
     name: irt-prometheus-data
   irt-grafana-data:

@@ -66,8 +66,8 @@ submit-to-result p95 by that amount. No LLM is called, so model spend is
 ## Deterministic evaluation cases
 
 The deterministic suite in `tests/test_evaluation.py` covers these 20 cases.
-The expected outcomes are asserted in every case. The tests use no live
-PostgreSQL connection.
+The expected outcomes are asserted in every case. The tests use only synthetic
+or replayed data and make no live-system connections.
 
 Latest validation: see the current test and container checks recorded at task
 completion. These unit/integration cases do not substitute for the Locust
@@ -75,7 +75,7 @@ performance report.
 
 | # | Case | Expected behavior |
 |---:|---|---|
-| 1 | Latency alert without metrics | Classify latency, medium severity, state that live checks did not run. |
+| 1 | Latency alert without metrics | Classify latency, medium severity, state that no live system is connected. |
 | 2 | Latency at least 3x supplied threshold | Classify latency and assign high severity. |
 | 3 | Latency with unavailable checks | Preserve empty performed-check list and recommend read-only checks. |
 | 4 | Latency with failing customer requests | Escalate as high without asserting a root cause. |

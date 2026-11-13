@@ -19,133 +19,11 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0
-        },
-        "overrides": []
-      },
       "gridPos": {
-        "h": 5,
-        "w": 6,
+        "h": 8,
+        "w": 12,
         "x": 0,
         "y": 0
-      },
-      "id": 1,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "pg_up",
-          "legendFormat": "Exporter up (1 = yes)",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "PostgreSQL exporter health",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 6,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "pg_stat_database_numbackends",
-          "legendFormat": "{{datname}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "PostgreSQL connections by database",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "pg_database_size_bytes",
-          "legendFormat": "{{datname}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "PostgreSQL database size",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
       },
       "id": 4,
       "targets": [
@@ -169,7 +47,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 0
       },
       "id": 5,
       "targets": [
@@ -193,7 +71,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 8
       },
       "id": 6,
       "targets": [
@@ -217,7 +95,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 8
       },
       "id": 7,
       "targets": [
@@ -241,7 +119,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 16
       },
       "id": 8,
       "targets": [
@@ -265,7 +143,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 16
       },
       "id": 9,
       "targets": [
@@ -289,7 +167,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 24
       },
       "id": 10,
       "targets": [
@@ -313,7 +191,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 24
       },
       "id": 11,
       "targets": [
@@ -337,7 +215,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 32
       },
       "id": 12,
       "targets": [
@@ -361,7 +239,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 32
       },
       "id": 13,
       "targets": [
@@ -385,7 +263,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 40
       },
       "id": 14,
       "targets": [
@@ -409,7 +287,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 40
       },
       "id": 15,
       "targets": [
@@ -433,7 +311,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 48
       },
       "id": 16,
       "targets": [
@@ -457,7 +335,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 48
       },
       "id": 17,
       "targets": [
@@ -475,7 +353,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["incident-triage", "postgresql"],
+  "tags": ["incident-triage"],
   "templating": {
     "list": []
   },
@@ -484,6 +362,6 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Incident Triage - PostgreSQL Overview",
+  "title": "Incident Triage - Service Overview",
   "version": 1
 }

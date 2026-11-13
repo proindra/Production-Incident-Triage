@@ -427,8 +427,15 @@ _PAGE = """<!doctype html>
 </head>
 <body>
   <h1>Incident Runbook Triage</h1>
-  <p>Advisory-only PostgreSQL triage. No remediation is executed.</p>
+  <p>Advisory-only triage using synthetic or replayed alerts. No live systems are connected and no remediation is executed.</p>
   <form id="triage-form">
+    <label for="sample-alert">Load a synthetic sample</label>
+    <select id="sample-alert">
+      <option value="">Choose a sample alert</option>
+      <option value="latency">High database latency</option>
+      <option value="connections">Connection pool nearly exhausted</option>
+      <option value="disk">Disk usage increasing</option>
+    </select>
     <label for="description">Incident description</label>
     <textarea id="description" maxlength="10000" required></textarea>
     <label for="context">Optional context (JSON object)</label>
@@ -449,6 +456,27 @@ _PAGE = """<!doctype html>
     <button type="submit">Submit feedback</button>
   </form>
   <script>
+    const sampleAlerts = {
+      latency: {
+        description: "Synthetic alert: database latency is elevated.",
+        context: { observed_latency_ms: 1800, threshold_latency_ms: 500 }
+      },
+      connections: {
+        description: "Synthetic alert: the database connection pool is nearly exhausted.",
+        context: { current_connections: 96, max_connections: 100 }
+      },
+      disk: {
+        description: "Synthetic alert: disk usage is increasing while table and index sizes are stable.",
+        context: { disk_used_percent: 88, disk_growth: "increasing", table_index_sizes: "stable" }
+      }
+    };
+    document.getElementById("sample-alert").addEventListener("change", (event) => {
+      const sample = sampleAlerts[event.target.value];
+      if (sample) {
+        document.getElementById("description").value = sample.description;
+        document.getElementById("context").value = JSON.stringify(sample.context, null, 2);
+      }
+    });
     document.getElementById("triage-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const output = document.getElementById("result");

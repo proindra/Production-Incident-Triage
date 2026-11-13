@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  Triage high database latency, connection exhaustion, and increasing disk usage with evidence-based recommendations and citations from the project runbooks. The FastAPI service uses deterministic mock diagnostics by default, with optional read-only PostgreSQL checks. It distinguishes observed evidence from hypotheses and never performs production remediation.
+  Triage synthetic or replayed database alerts for high latency, connection exhaustion, and increasing disk usage. The FastAPI service uses supplied alert/context data and deterministic synthetic diagnostics only; it never connects to a live system or performs remediation.
 </p>
 
 ---
@@ -36,7 +36,7 @@
 │   ├── domain/                              # models, policies, safety, runbook types
 │   ├── services/                            # triage, agents, retrieval, service ports
 │   ├── infrastructure/
-│   │   ├── diagnostics/                     # mock and read-only PostgreSQL adapters
+│   │   ├── diagnostics/                     # deterministic synthetic fixtures
 │   │   ├── llm/                              # provider resilience and local model stub
 │   │   ├── queue/                           # Redis/RQ queue and worker
 │   │   ├── rag/                             # Groq, ingestion, and FAISS adapters
@@ -48,7 +48,7 @@
 ├── docs/                                    # brief, architecture, evaluation, operations
 ├── grafana/                                 # dashboard definitions
 ├── results/                                 # Locust CSV output
-├── scripts/                                 # benchmarks, load test, database setup
+├── scripts/                                 # benchmarks, load tests, evaluation
 ├── tests/                                   # API, policy, queue, and RAG tests
 ├── .dockerignore, .env.example, .gitignore, README.md
 └── Dockerfile, docker-compose.yml, prometheus.yml, pyproject.toml, uv.lock
@@ -65,7 +65,8 @@ The original project brief is preserved in
 
 ```mermaid
 flowchart TD
-    User[Browser or API client] --> API[FastAPI API]
+    User[Browser or API client] --> Alert[Synthetic or replayed alert]
+    Alert --> API[FastAPI API]
     API --> Valid{Request valid?}
     Valid -- No --> Quarantine[Quarantine with field errors]
     Quarantine --> SQLite[(SQLite history)]
@@ -98,12 +99,8 @@ flowchart TD
     FAISS --> Semantic
     Keyword --> Evidence
     Semantic --> Evidence
-    Agent1 --> DiagnosticMode{DATABASE_URL configured?}
-    DiagnosticMode -- No --> MockDiagnostics[Mock adapter<br/>no live checks]
-    DiagnosticMode -- Yes --> ReadOnlyDiagnostics[Read-only PostgreSQL checks]
-    ReadOnlyDiagnostics --> Postgres[(PostgreSQL diagnostic target)]
+    Agent1 --> MockDiagnostics[Deterministic synthetic diagnostics]
     MockDiagnostics --> Policy[Deterministic severity,<br/>routing, and recommendations]
-    ReadOnlyDiagnostics --> Policy
     Evidence --> Policy
 
     Policy --> SummaryMode{RAG summary available?}
@@ -132,8 +129,6 @@ flowchart TD
     API -. service and index metrics .-> Prometheus[Prometheus]
     Redis --> RedisExporter[Redis exporter]
     RedisExporter -. queue metrics .-> Prometheus
-    Postgres --> PostgresExporter[PostgreSQL exporter]
-    PostgresExporter -. database metrics .-> Prometheus
     DockerHost[Docker host containers] --> CAdvisor[cAdvisor]
     CAdvisor -. resource metrics .-> Prometheus
     Prometheus --> Grafana[Grafana dashboard]
@@ -164,11 +159,12 @@ Set-Location Production-Incident-Triage
 docker compose up --build
 ```
 
-The default setup needs no `.env` file, Groq key, or live database URL. It uses
-deterministic triage and mock diagnostics; RAG and model-selected tools are
-disabled until configured. Compose starts the API, Redis/RQ, worker, local model
-stub, PostgreSQL diagnostic target, exporters, Prometheus, Grafana, cAdvisor,
-and Jaeger.
+The default setup needs no `.env` file, Groq key, or database URL. It uses
+synthetic or replayed alerts and deterministic diagnostics; RAG and
+model-selected tools are disabled until configured. Compose starts the API,
+Redis/RQ, worker, local model stub, Redis exporter, Prometheus, Grafana,
+cAdvisor, and Jaeger. No live database or external monitoring target is
+connected.
 
 Open the UI at <http://127.0.0.1:8000/> or the API docs at
 <http://127.0.0.1:8000/docs>. `GET /health` checks that the API process is
@@ -193,10 +189,11 @@ description and context. The equivalent backwards-compatible API request is:
 ```
 
 Expect disk/WAL triage with medium severity. WAL retention should be described
-as a possible cause, not a confirmed one; the default mock adapter should report
-that no live diagnostic checks were performed.
+as a possible cause, not a confirmed one; the supplied metrics are synthetic
+and no live diagnostic checks are performed.
 
-The typed alert form supports an explicit on-call note:
+The API also accepts a structured synthetic alert payload with an explicit
+on-call note:
 
 ```json
 {
@@ -297,59 +294,33 @@ not semantic judgments; consult
 [docs/evaluation.md](docs/evaluation.md) for their definitions and limitations.
 The command makes model calls and can incur provider charges.
 
-## Optional live PostgreSQL diagnostics
+## Synthetic and replayed alerts
 
-Without `DATABASE_URL`, the service uses an empty deterministic mock adapter:
-it does not fabricate metrics or claim live checks ran. To enable PostgreSQL
-diagnostics, provision a dedicated least-privilege role instead of using the
-Compose bootstrap superuser:
-
-```powershell
-Get-Content .\scripts\create_readonly_role.sql -Raw | docker compose exec -T irt-postgres psql -U incident_user -d incidentdb
-docker compose exec irt-postgres psql -U incident_user -d incidentdb
-```
-
-At the interactive `psql` prompt, set a local password with
-`\password incident_readonly`, then exit with `\q`. Set the environment variable
-before starting the API (URL-encode any reserved characters in the password):
-
-```powershell
-$env:DATABASE_URL = "postgresql://incident_readonly:<local-password>@localhost:2026/incidentdb"
-docker compose up --build
-```
-
-The adapter only runs static `SELECT` statements inside a read-only transaction,
-uses a three-second connection and statement timeout, and reports unavailable
-checks rather than treating them as successful. PostgreSQL permissions and
-available monitoring columns can vary; host disk/free-space trends still need
-to come from monitoring or the managed database service. Do not put real
-credentials in source control, incident descriptions, or logs. `.env.example`
-contains only local-development examples.
+The project does not connect to a live database or monitoring system. Use the
+browser's **Load a synthetic sample** selector or submit a recorded alert
+payload to `POST /incidents/triage`. The sample metrics are user-supplied
+scenario data; the worker does not collect or invent live measurements.
+Severity, routing, retrieval, and evidence verification run on that supplied
+payload.
 
 ## Monitoring stack
 
 The supplied Compose and Prometheus files are the local development setup.
-They expose the API at `localhost:8000`, PostgreSQL at `localhost:2026`,
-Prometheus at `localhost:2027`, Grafana at `localhost:2028`, the PostgreSQL
-exporter at `localhost:2029`, and Jaeger at `localhost:2030`. Keep these
-services local; the example credentials are not production credentials.
+They expose the API at `localhost:8000`, Prometheus at `localhost:2027`,
+Grafana at `localhost:2028`, and Jaeger at `localhost:2030`. Metrics cover the
+triage service and local container/queue health; PostgreSQL metrics are not
+scraped.
 
 ### Local container access and credentials
 
 | Service/container | Local address | Username | Password | Notes |
 |---|---|---|---|---|
-| PostgreSQL (`irt-postgres`) | `localhost:2026` | `incident_user` | `local_dev_password` | Database: `incidentdb`. These are the Compose bootstrap credentials. |
 | Grafana (`irt-grafana`) | <http://localhost:2028> | `admin` | `local_grafana_password` | Grafana UI login. |
 | Prometheus (`irt-prometheus`) | <http://localhost:2027> | None | None | No authentication is configured in the supplied local Compose setup. |
-| PostgreSQL Exporter (`irt-postgres-exporter`) | <http://localhost:2029/metrics> | None for the metrics endpoint | None | Scrapes PostgreSQL using `incident_user` and the PostgreSQL password above over the Docker network. |
 | Triage API | <http://localhost:8000> | None | None | No authentication is configured; run locally only. |
 
-For the API's optional live diagnostics, use the separate `incident_readonly`
-role and a password you set yourself as described above; it does not have a
-default password in the project. Prometheus, the exporter metrics endpoint,
-and the API are unauthenticated in this development setup. Do not expose them
-to an untrusted network, and change/reconfigure all credentials before any
-shared or production deployment.
+Prometheus and the API are unauthenticated in this development setup. Do not
+expose them to an untrusted network.
 
 ```powershell
 docker compose config
@@ -357,23 +328,15 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Check <http://localhost:2027/targets> for the API, Prometheus, and exporter
-scrape targets. Traces are available in Jaeger at <http://localhost:2030>. In Grafana, add a
+Check <http://localhost:2027/targets> for the configured local service scrape
+targets. Traces are available in Jaeger at <http://localhost:2030>. In Grafana, add a
 Prometheus data source with URL `http://irt-prometheus:9090` (Grafana must use
-the container-network URL, not `localhost:2027`). The exporter exposes metrics
-such as `pg_database_size_bytes` and `pg_stat_database_numbackends`; verify
-available metrics at <http://localhost:2029/metrics> before building panels.
+the container-network URL, not `localhost:2027`).
 The checked-in dashboard at
 [`grafana/incident-triage-dashboard.json`](grafana/incident-triage-dashboard.json)
-uses verified `pg_up`, `pg_stat_database_numbackends`, and
-`pg_database_size_bytes` queries, plus triage API and worker metrics. Import it
+contains triage API, worker, queue, and local container metrics only. Import it
 from Grafana's dashboard UI and select the `Incident Triage Prometheus` data
-source.
-
-The supplied Compose file uses its local bootstrap database credentials for
-the exporter. This is suitable only for the isolated development demo; do not
-expose this stack or reuse those credentials in a shared/production deployment.
-The application adapter can use the separate `incident_readonly` role above.
+source. It does not display PostgreSQL target metrics.
 
 ## Safety and limitations
 

@@ -28,9 +28,9 @@ def test_latency_uses_reported_metrics_and_explicit_mock_checks() -> None:
     assert all("terminate" not in action.lower() or "do not" in action.lower() for action in result.recommended_actions)
 
 
-def test_latency_without_live_data_reports_uncertainty() -> None:
+def test_latency_without_supplied_metrics_reports_uncertainty() -> None:
     result = TriageEngine().triage(TriageRequest(incident_description="Database latency has increased"))
 
     assert result.checks_performed == []
-    assert any("No live database checks" in item for item in result.uncertainties)
+    assert any("No live system is connected" in item for item in result.uncertainties)
     assert result.checks_recommended

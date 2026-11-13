@@ -136,6 +136,8 @@ def test_ui_page_loads() -> None:
 
     assert response.status_code == 200
     assert "Incident Runbook Triage" in response.text
+    assert "Load a synthetic sample" in response.text
+    assert "No live systems are connected" in response.text
 
 
 def test_triage_request_requires_non_blank_incident_description() -> None:
@@ -247,7 +249,7 @@ def test_triage_response_validates_confidence_and_separates_facts() -> None:
         runbook_references=[],
         recommended_actions=["Collect wait-event data before changing configuration."],
         escalation_guidance="Escalate if service availability is affected.",
-        uncertainties=["No live database checks have been run."],
+        uncertainties=["No live system is connected."],
     )
 
     assert response.checks_performed == []

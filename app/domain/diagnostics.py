@@ -14,9 +14,9 @@ class DiagnosticSnapshot:
 
 
 class DiagnosticError(RuntimeError):
-    """A diagnostic adapter could not connect or complete its collection."""
+    """A diagnostic adapter could not return its configured evidence."""
 
 
 class BaseDiagnostic(Protocol):
     def collect(self, category: str) -> DiagnosticSnapshot:
-        """Collect only the fixed, read-only checks for a known category."""
+        """Return configured diagnostic fixtures for a known category."""

@@ -76,7 +76,7 @@ class TriageEngine:
                 diagnostic = self.diagnostic.collect(category)
             except DiagnosticError as error:
                 diagnostic_error = str(error)
-                logger.warning("Read-only diagnostics unavailable for %s: %s", category, error)
+                logger.warning("Synthetic diagnostic fixtures unavailable for %s: %s", category, error)
 
         evidence_values = {**safe_context, **diagnostic.evidence}
         evidence = [f"Incident report: {description}"]
@@ -89,7 +89,7 @@ class TriageEngine:
             for key, value in diagnostic.evidence.items()
         )
         if diagnostic_error:
-            evidence.append("No PostgreSQL measurements were collected.")
+            evidence.append("No diagnostic measurements were collected.")
 
         hypotheses, uncertainties = _assess(category, evidence_values, description)
         checks_recommended = _checks(category, evidence_values)
@@ -97,7 +97,7 @@ class TriageEngine:
             uncertainties.append(diagnostic_error)
         elif not diagnostic.checks_performed:
             uncertainties.append(
-                "No live database checks were run; measurements in the request context are user-supplied."
+                "No live system is connected; measurements in the request context are synthetic or replayed and user-supplied."
             )
         uncertainties.extend(diagnostic.unavailable)
         if category == "unknown":

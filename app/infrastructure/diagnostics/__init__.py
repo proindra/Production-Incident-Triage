@@ -1,1 +1,1 @@
-"""Diagnostic adapters for mock and read-only PostgreSQL checks."""
+"""Synthetic diagnostic fixtures for triage tests and demonstrations."""

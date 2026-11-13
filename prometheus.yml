@@ -15,10 +15,6 @@ scrape_configs:
     static_configs:
       - targets: ["irt-redis-exporter:9121"]
 
-  - job_name: irt-postgres
-    static_configs:
-      - targets: ["irt-postgres-exporter:9187"]
-
   - job_name: jaeger
     metrics_path: /metrics
     static_configs:

@@ -11,9 +11,6 @@ from app.core.config import DEFAULT_SETTINGS
 from app.core.observability import configure_observability
 from app.domain.schemas import TriageRequest
 from app.infrastructure.diagnostics.mock import MockDiagnostic
-from app.infrastructure.diagnostics.postgres_readonly import (
-    PostgresReadOnlyDiagnostic,
-)
 from app.infrastructure.queue.queueing import (
     record_agent_metric,
     record_provider_metrics,
@@ -131,14 +128,9 @@ def _process_triage(
 ) -> dict[str, Any]:
     if DEFAULT_SETTINGS.triage_stub_delay_seconds > 0:
         time.sleep(DEFAULT_SETTINGS.triage_stub_delay_seconds)
-    diagnostic = (
-        PostgresReadOnlyDiagnostic(DEFAULT_SETTINGS.database_url)
-        if DEFAULT_SETTINGS.database_url
-        else MockDiagnostic()
-    )
     rag_service = _get_rag_service()
     engine = TriageEngine(
-        diagnostic=diagnostic,
+        diagnostic=MockDiagnostic(),
         retriever=RunbookRetriever(
             DEFAULT_SETTINGS.runbooks_path,
             postgres_docs_path=_rag_settings.postgres_docs_path,

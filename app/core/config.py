@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str | None
     incident_db_path: str
     runbooks_path: str
     redis_url: str
@@ -25,7 +24,6 @@ class Settings:
     @classmethod
     def from_environment(cls) -> Settings:
         return cls(
-            database_url=os.getenv("DATABASE_URL"),
             incident_db_path=os.getenv("INCIDENT_DB_PATH", "data/incidents.db"),
             runbooks_path=os.getenv("RUNBOOKS_PATH", "corpus/runbooks"),
             redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),

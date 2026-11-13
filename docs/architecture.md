@@ -7,8 +7,8 @@
   infrastructure dependencies.
 - `app/services` coordinates triage, retrieval, and agent workflows through
   those domain contracts.
-- `app/infrastructure` contains PostgreSQL, Redis/RQ, SQLite, and optional RAG
-  adapters.
+- `app/infrastructure` contains Redis/RQ, SQLite, synthetic diagnostics, and
+  optional RAG adapters.
 - `app/core` provides shared configuration and observability setup.
 
 The root `app/main.py` and `app/worker.py` modules preserve the existing runtime
@@ -17,7 +17,7 @@ entry points; their implementations live in the API and infrastructure layers.
 ## Request path
 
 ```text
-Browser / API client
+Browser / API client submits a synthetic or replayed alert
     -> FastAPI validation, quarantine, correlation ID, per-client rate limit
     -> Redis/RQ queue (HTTP 202 with run ID)
     -> agent-worker replica
@@ -26,6 +26,7 @@ Browser / API client
             -> model-selected tools when enabled, otherwise deterministic tool flow
             -> keyword search (default) or semantic FAISS search (RAG mode)
             -> clause lookup when the disk/WAL scenario calls for it
+            -> deterministic synthetic diagnostic fixtures only
         -> optional Groq summary over retrieved passages
         -> LangGraph Verification Agent
             -> check every citation against retrieved source text
@@ -76,13 +77,13 @@ calls. The correlation ID and W3C trace context travel through the queued job.
   unaccepted request does not start a worker.
 - A worker failure or timeout remains a failed run and is not converted into a
   successful result.
-- Unavailable read-only PostgreSQL checks are reported as unavailable. No
-  remediation SQL or other production changes are executed.
+- The worker never connects to a database or monitoring target. Evidence comes
+  only from the synthetic/replayed alert payload; no live checks are run.
 - Missing/invalid citations trigger one alternate retrieval; if verification
   still fails, the result is changed to `unknown` and routed to a human.
 - The API, Redis, and worker are separate Compose services so the API remains
-  responsive during long runs and workers can scale independently. PostgreSQL,
-  Prometheus, Grafana, and Jaeger provide local diagnostics and observability.
+  responsive during long runs and workers can scale independently. Prometheus,
+  Grafana, and Jaeger provide local service observability.
 
 The optional FAISS ingestion command is
 `python -m app.infrastructure.rag.document_ingestion`. It keeps unchanged

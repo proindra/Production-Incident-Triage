@@ -7,7 +7,6 @@ dependencies = [
     "httpx",
     "pydantic",
     "pydantic-settings",
-    "psycopg[binary]",
     "uvicorn[standard]",
     "langgraph>=1.2.20",
     "redis>=8.1.0",
