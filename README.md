@@ -64,129 +64,116 @@ The original project brief is preserved in
 ## Architecture workflow
 
 ```mermaid
-flowchart TD
-    Generator[Synthetic Alert Generator<br/>built-in scenarios] --> Frontend[Frontend dashboard]
-    Replay[Recorded alert payload] --> API
-    Frontend --> API[FastAPI Triage API]
-    API --> Valid{Request valid?}
-    Valid -- No --> Quarantine[Quarantine with field errors]
-    Quarantine --> SQLite[(SQLite history)]
-    Quarantine --> Rejected[HTTP 422 with quarantine ID]
-    Rejected --> Frontend
+flowchart LR
+    Alert[1. Synthetic or replayed alert<br/>Built-in scenario or recorded payload]
+    UI[2. Frontend dashboard<br/>Submit alert and view result]
+    API[3. FastAPI<br/>Validate request and quarantine invalid input]
+    Queue[4. Redis queue and background worker<br/>Asynchronous run]
+    Agent1[5. Multi-agent analysis<br/>Agent 1 investigates and gathers evidence]
+    Tools[Shared tools<br/>Request lookup, corpus search, clause lookup]
+    Knowledge[6. Runbook knowledge<br/>Three project runbooks and optional RAG]
+    Policy[7. Deterministic severity and routing]
+    Agent2[5. Agent 2 - Verification and routing<br/>Check evidence and citations]
+    Verified{Evidence verified?}
+    Recommendation[8. Verified recommendation<br/>Citations and safe first-response steps]
+    Escalation[Human escalation<br/>Withhold unsupported recommendation]
+    Result[9. SQLite history and Redis run status]
+    Display[Frontend displays result]
+    Quarantine[Quarantine invalid request]
 
-    Valid -- Yes --> Queue[Enqueue triage job]
-    Queue --> Accepted[HTTP 202 with run ID]
-    Accepted --> Frontend
-    Queue --> Redis[(Redis and RQ)]
-    Redis --> Worker[Background worker]
-    Worker --> InputGuard
-
-    InputGuard --> Agent1[Agent 1 - Incident Investigation Agent<br/>classify and gather evidence]
-    Agent1 --> ToolMode{Model tool selection enabled?}
-    ToolMode -- Yes and input clear --> ToolModel[Groq tool-calling model]
-    ToolMode -- Input flagged --> LocalTools
-    ToolModel -- Tool call --> ModelTools[Bounded tools<br/>request fields, corpus search,<br/>clause lookup]
-    ModelTools -- Tool result --> ToolModel
-    ToolModel -- Done or budget reached --> Evidence[Retrieved evidence]
-    ToolMode -- No or model unavailable --> LocalTools[Deterministic tool flow<br/>uses the same three tools]
-    LocalTools --> Evidence
-
-    ModelTools -. corpus search .-> RAGMode{RAG enabled?}
-    LocalTools -. corpus search .-> RAGMode
-    Runbooks[(Three project runbooks)] --> Keyword[Keyword retrieval]
-    RAGMode -- No --> Keyword
-    Runbooks -. offline indexing .-> Indexing[Chunk and embed]
-    PostgresDocs[(Selected PostgreSQL 17 docs)] -. offline indexing .-> Indexing
-    Indexing --> FAISS[(Persistent FAISS index)]
-    RAGMode -- Yes --> Semantic[FAISS semantic retrieval]
-    FAISS --> Semantic
-    Keyword --> Evidence
-    Semantic --> Evidence
-    Agent1 --> MockDiagnostics[Deterministic synthetic diagnostics]
-    MockDiagnostics --> Policy[Deterministic severity,<br/>routing, and recommendations]
-    Evidence --> Policy
-
-    Policy --> SummaryMode{RAG summary available?}
-    SummaryMode -- Yes --> SummaryInputGuard
-    SummaryInputGuard -- Clear --> Groq[Grounded Groq summary<br/>versioned prompt]
-    SummaryInputGuard -- Flagged - skip generation --> Agent2
-    SummaryMode -- No --> Agent2[Agent 2 - Evidence Verification & Routing Agent]
-    Groq --> OutputGuard
-    OutputGuard -- Valid --> Agent2
-    OutputGuard -- Rejected - keep deterministic result --> Agent2
-    Agent2 --> Verified{Evidence and citations verified?}
-    Verified -- Yes --> Return[Return verified recommendation]
-    Verified -- No - retry available --> Retry[Alternate retrieval<br/>maximum one retry]
-    Retry --> Policy
-    Verified -- No - retry already used --> Escalation[Human escalation<br/>no unverified recommendation]
-    Return --> Result[Persist completed result]
-    Escalation --> Result
-    Result --> SQLite
-    Result --> Redis
-
-    Frontend --> Poll[Poll run status endpoint]
-    Poll --> API
-    API --> Redis
-    Redis --> Poll
-    Poll --> Frontend
-    Frontend --> Feedback[Submit feedback]
-    Feedback --> API
-    API --> SQLite
-
-    subgraph Observability[Application infrastructure observability]
-        API -. service metrics .-> Prometheus[Prometheus]
-        Redis --> RedisExporter[Redis exporter]
-        RedisExporter -. queue metrics .-> Prometheus
-        DockerHost[Docker host containers] --> CAdvisor[cAdvisor]
-        CAdvisor -. resource metrics .-> Prometheus
-        Prometheus --> Grafana[Grafana dashboard]
-    end
-    API -. traces .-> Jaeger[Jaeger]
-    Worker -. traces .-> Jaeger
-
-    subgraph Guardrails[Guardrails and Input/Output Validation]
-        InputGuard[Request input guard<br/>schema checks, secret redaction,<br/>injection and targeted-abuse heuristics]
-        SummaryInputGuard[Summary input guard<br/>incident, context and retrieved text]
-        OutputGuard[Summary output guard<br/>unsafe actions, unsupported causes,<br/>targeted toxicity, length and citations]
-    end
-
-    subgraph OfflineEvaluation[Offline development and evaluation - outside the runtime request path]
-        Cases[evaluation/scenarios.json<br/>20 synthetic/replayed scenarios<br/>expected outcomes and source passages]
-        Evaluator[Evaluation Pipeline<br/>deterministic tests + RAG prompt evaluator]
-        PromptVersions[Before / after prompt versions]
-        Scores[Evaluation report<br/>context relevance, groundedness,<br/>faithfulness, hallucination rate,<br/>citation validity]
-        Cases --> Evaluator
-        PromptVersions --> Evaluator
-        Runbooks --> Evaluator
-        Evaluator --> Scores
-    end
+    Alert --> UI --> API --> Queue --> Agent1
+    API -. invalid payload .-> Quarantine
+    Agent1 --> Tools
+    Knowledge --> Tools
+    Tools --> Policy --> Agent2 --> Verified
+    Verified -- Yes --> Recommendation --> Result
+    Verified -- No --> Escalation --> Result
+    Result --> Display
+    Display -. feedback .-> API
 ```
 
-The frontend's synthetic alert generator fills the form with a built-in
-scenario; recorded alert payloads can also be submitted for replay. The
-frontend submits the alert to FastAPI and polls for the final assessment.
-Guardrails validate requests and inspect model-bound free text, and generated
-summaries are checked before verification; flagged input skips model calls and
-rejected summaries fall back to deterministic triage.
-The offline evaluation pipeline uses the versioned scenario set to check
-expected classifications and supporting passages, and compares before/after
-RAG prompts using context relevance, groundedness, faithfulness, hallucination
-rate, and citation validity. It runs separately from the deployed request path;
-the lexical grounding and faithfulness scores are explicitly proxies, not
-human-judged semantic scores.
-These guardrails use local pattern checks and deterministic policy/verification;
-they are not a general-purpose prompt-injection or toxicity classifier.
-Valid requests are processed asynchronously; the API returns a run ID while
-Agent 1 (Incident Investigation Agent) classifies the incident and gathers
-evidence. Agent 2 (Evidence Verification & Routing Agent) verifies the
-evidence and citations. A failed verification triggers at most one alternate
-retrieval; if verification still fails, the result is escalated without an
-unsupported recommendation. Tool selection can be model-driven or use the
-bounded deterministic flow. RAG and Groq summaries are optional; severity,
-routing, and recommended actions remain deterministic. SQLite keeps incident
-metadata, rejected-request records, and feedback; Redis/RQ tracks job status
-and results. Model tool selection is limited to four rounds and eight total
-tool calls per run.
+### Diagram 2 - Application observability
+
+```mermaid
+flowchart LR
+    subgraph Runtime[Application runtime]
+        API[FastAPI]
+        Worker[Agents and background worker]
+        Redis[Redis and RQ]
+    end
+    API -. application and latency metrics .-> Prometheus[Prometheus]
+    RedisExporter[Redis exporter] -. queue metrics .-> Prometheus
+    CAdvisor[cAdvisor] -. container resources .-> Prometheus
+    Prometheus --> Grafana[Grafana dashboards]
+    API -. distributed traces .-> Jaeger[Jaeger]
+    Worker -. distributed traces .-> Jaeger
+    API --> ContainerLogs[Container stdout and stderr]
+    Worker --> ContainerLogs
+    ContainerLogs -. docker compose logs .-> Operator[Developer or operator]
+```
+
+Prometheus and Grafana observe the triage application and its infrastructure;
+they do not detect incidents on a live PostgreSQL system. Jaeger receives
+OpenTelemetry traces. Application logs are available from the local Compose
+containers with `docker compose logs`; there is no centralized log backend.
+
+### Diagram 3 - Offline LLMOps and evaluation
+
+```mermaid
+flowchart LR
+    Docs[Selected PostgreSQL documentation]
+    Runbooks[Three project runbooks]
+    Ingest[Offline ingestion<br/>Chunk and embed]
+    Index[Persistent FAISS index]
+    Scenarios[20 evaluation scenarios<br/>Expected outcomes and source passages]
+    Prompts[Versioned prompts<br/>Before and after deliberate change]
+    Evaluator[Offline evaluation pipeline]
+    Metrics[Comparison report<br/>Context relevance, groundedness,<br/>faithfulness, hallucination rate,<br/>citation validity]
+
+    Docs --> Ingest
+    Runbooks --> Ingest --> Index
+    Scenarios --> Evaluator
+    Prompts --> Evaluator
+    Index --> Evaluator
+    Evaluator --> Metrics
+```
+
+The three diagrams separate the request path from observability and offline
+development; ingestion and evaluation do not run on an incident request.
+
+### Runtime design notes
+
+- **Guardrails:** request schemas and local input/output checks protect
+  model-bound incident, context, and retrieved text. Flagged input bypasses
+  model calls. Summary output is checked for selected toxic phrases, unsafe
+  remediation, unsupported cause assertions, length, and citations; rejected
+  summaries leave deterministic triage in place. These pattern-based checks
+  are not a general-purpose prompt-injection or toxicity classifier.
+- **Agent and retrieval limits:** Agent 1 investigates with the shared
+  request-lookup, corpus-search, and clause-lookup tools; Agent 2 verifies
+  sources and citations. Tool selection is limited to four rounds and eight
+  calls, verification gets at most one alternate retrieval, and RQ jobs have a
+  120-second timeout.
+- **Reliability and policy:** RAG and model-selected tools are optional.
+  Bounded provider retries and a circuit breaker protect model calls; failures
+  fall back to deterministic retrieval/triage. Severity, routing, and
+  remediation recommendations remain deterministic and advisory.
+- **LLMOps and observability:** prompt versions, model token usage, and
+  provider token counts are recorded; cost estimates are included when token
+  prices are configured. OpenTelemetry traces, application metrics, and
+  queue/worker outcomes support operational diagnosis.
+- **Platform and performance:** Redis/RQ tracks run status, SQLite stores
+  incident history and feedback, and a bounded in-process LRU caches retrieval.
+  `RATE_LIMIT_PER_MINUTE` controls submission rate. Locust measures full
+  submit-to-result latency; see [docs/evaluation.md](docs/evaluation.md) for
+  worker scaling and results.
+
+The offline evaluator compares versioned RAG prompts on the same scenario set
+and reports before/after deltas. Groundedness and faithfulness are reproducible
+lexical proxies, not semantic or human-judged scores; details are in
+[docs/evaluation.md](docs/evaluation.md). Further operational behavior is
+documented in [docs/architecture.md](docs/architecture.md) and
+[docs/service-operations.md](docs/service-operations.md).
 
 ## Getting started
 
