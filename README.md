@@ -65,17 +65,18 @@ The original project brief is preserved in
 
 ```mermaid
 flowchart TD
-    User[Browser or API client] --> Alert[Synthetic or replayed alert]
-    Alert --> API[FastAPI API]
+    Generator[Synthetic Alert Generator<br/>built-in scenarios] --> Frontend[Frontend dashboard]
+    Replay[Recorded alert payload] --> API
+    Frontend --> API[FastAPI Triage API]
     API --> Valid{Request valid?}
     Valid -- No --> Quarantine[Quarantine with field errors]
     Quarantine --> SQLite[(SQLite history)]
     Quarantine --> Rejected[HTTP 422 with quarantine ID]
-    Rejected --> User
+    Rejected --> Frontend
 
     Valid -- Yes --> Queue[Enqueue triage job]
     Queue --> Accepted[HTTP 202 with run ID]
-    Accepted --> User
+    Accepted --> Frontend
     Queue --> Redis[(Redis and RQ)]
     Redis --> Worker[Background worker]
 
@@ -117,25 +118,30 @@ flowchart TD
     Result --> SQLite
     Result --> Redis
 
-    User --> Poll[Poll run status endpoint]
+    Frontend --> Poll[Poll run status endpoint]
     Poll --> API
     API --> Redis
     Redis --> Poll
-    Poll --> User
-    User --> Feedback[Submit feedback]
+    Poll --> Frontend
+    Frontend --> Feedback[Submit feedback]
     Feedback --> API
     API --> SQLite
 
-    API -. service and index metrics .-> Prometheus[Prometheus]
-    Redis --> RedisExporter[Redis exporter]
-    RedisExporter -. queue metrics .-> Prometheus
-    DockerHost[Docker host containers] --> CAdvisor[cAdvisor]
-    CAdvisor -. resource metrics .-> Prometheus
-    Prometheus --> Grafana[Grafana dashboard]
+    subgraph Observability[Application infrastructure observability]
+        API -. service metrics .-> Prometheus[Prometheus]
+        Redis --> RedisExporter[Redis exporter]
+        RedisExporter -. queue metrics .-> Prometheus
+        DockerHost[Docker host containers] --> CAdvisor[cAdvisor]
+        CAdvisor -. resource metrics .-> Prometheus
+        Prometheus --> Grafana[Grafana dashboard]
+    end
     API -. traces .-> Jaeger[Jaeger]
     Worker -. traces .-> Jaeger
 ```
 
+The frontend's synthetic alert generator fills the form with a built-in
+scenario; recorded alert payloads can also be submitted for replay. The
+frontend submits the alert to FastAPI and polls for the final assessment.
 Valid requests are processed asynchronously; the API returns a run ID while
 Agent 1 (Incident Investigation Agent) classifies the incident and gathers
 evidence. Agent 2 (Evidence Verification & Routing Agent) verifies the
