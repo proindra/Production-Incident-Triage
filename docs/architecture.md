@@ -17,24 +17,35 @@ entry points; their implementations live in the API and infrastructure layers.
 ## Request path
 
 ```text
-Browser / API client submits a synthetic or replayed alert
-    -> FastAPI validation, quarantine, correlation ID, per-client rate limit
+Synthetic Alert Generator (built-in scenarios) or recorded alert replay
+    -> Frontend dashboard
+    -> FastAPI Triage API validation, quarantine, correlation ID, per-client rate limit
     -> Redis/RQ queue (HTTP 202 with run ID)
     -> agent-worker replica
         -> LangGraph Triage Agent
+            -> schema validation, secret redaction, and local input guardrails
             -> request-field lookup
             -> model-selected tools when enabled, otherwise deterministic tool flow
             -> keyword search (default) or semantic FAISS search (RAG mode)
             -> clause lookup when the disk/WAL scenario calls for it
             -> deterministic synthetic diagnostic fixtures only
         -> optional Groq summary over retrieved passages
+            -> summary output checks before it reaches verification
         -> LangGraph Verification Agent
             -> check every citation against retrieved source text
             -> one alternate search if verification fails
             -> escalate rather than return an unverified recommendation
         -> SQLite incident history
-    <- status endpoint returns the finished result
+    -> status endpoint returns the finished result
+    -> Frontend displays assessment and escalation guidance
+
+Application infrastructure observability:
+    API, Redis exporter, cAdvisor -> Prometheus -> Grafana
 ```
+
+The browser UI provides a small synthetic alert generator backed by fixed,
+reviewable scenarios. Recorded payloads may be submitted through the API. Neither
+path connects to a live database or monitoring system.
 
 The triage agent owns incident interpretation, retrieval strategy, and a draft
 recommendation. It skips corpus search for unsupported incidents and searches
@@ -56,6 +67,12 @@ policy or perform remediation. Local lexical input/output safety checks are
 enabled, but they are not a general toxicity or prompt-injection classifier.
 The summary records a prompt version and provider-reported token counts; cost
 estimates are emitted only when both token prices are configured.
+Flagged input bypasses model calls, and a rejected summary leaves deterministic
+triage in place. Input checks use local patterns for prompt injection and selected abusive
+phrases. Summary output is rejected for selected toxicity patterns, unsafe
+remediation, unsupported-cause assertions, excessive length, or invalid
+citations. These are guardrails, not a general-purpose toxicity or
+prompt-injection classifier.
 
 ## Tools
 

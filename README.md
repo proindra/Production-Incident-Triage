@@ -79,10 +79,12 @@ flowchart TD
     Accepted --> Frontend
     Queue --> Redis[(Redis and RQ)]
     Redis --> Worker[Background worker]
+    Worker --> InputGuard
 
-    Worker --> Agent1[Agent 1 - Incident Investigation Agent<br/>classify and gather evidence]
+    InputGuard --> Agent1[Agent 1 - Incident Investigation Agent<br/>classify and gather evidence]
     Agent1 --> ToolMode{Model tool selection enabled?}
-    ToolMode -- Yes --> ToolModel[Groq tool-calling model]
+    ToolMode -- Yes and input clear --> ToolModel[Groq tool-calling model]
+    ToolMode -- Input flagged --> LocalTools
     ToolModel -- Tool call --> ModelTools[Bounded tools<br/>request fields, corpus search,<br/>clause lookup]
     ModelTools -- Tool result --> ToolModel
     ToolModel -- Done or budget reached --> Evidence[Retrieved evidence]
@@ -105,9 +107,13 @@ flowchart TD
     Evidence --> Policy
 
     Policy --> SummaryMode{RAG summary available?}
-    SummaryMode -- Yes --> Groq[Grounded Groq summary<br/>versioned prompt]
+    SummaryMode -- Yes --> SummaryInputGuard
+    SummaryInputGuard -- Clear --> Groq[Grounded Groq summary<br/>versioned prompt]
+    SummaryInputGuard -- Flagged - skip generation --> Agent2
     SummaryMode -- No --> Agent2[Agent 2 - Evidence Verification & Routing Agent]
-    Groq --> Agent2
+    Groq --> OutputGuard
+    OutputGuard -- Valid --> Agent2
+    OutputGuard -- Rejected - keep deterministic result --> Agent2
     Agent2 --> Verified{Evidence and citations verified?}
     Verified -- Yes --> Return[Return verified recommendation]
     Verified -- No - retry available --> Retry[Alternate retrieval<br/>maximum one retry]
@@ -137,11 +143,39 @@ flowchart TD
     end
     API -. traces .-> Jaeger[Jaeger]
     Worker -. traces .-> Jaeger
+
+    subgraph Guardrails[Guardrails and Input/Output Validation]
+        InputGuard[Request input guard<br/>schema checks, secret redaction,<br/>injection and targeted-abuse heuristics]
+        SummaryInputGuard[Summary input guard<br/>incident, context and retrieved text]
+        OutputGuard[Summary output guard<br/>unsafe actions, unsupported causes,<br/>targeted toxicity, length and citations]
+    end
+
+    subgraph OfflineEvaluation[Offline development and evaluation - outside the runtime request path]
+        Cases[evaluation/scenarios.json<br/>20 synthetic/replayed scenarios<br/>expected outcomes and source passages]
+        Evaluator[Evaluation Pipeline<br/>deterministic tests + RAG prompt evaluator]
+        PromptVersions[Before / after prompt versions]
+        Scores[Evaluation report<br/>context relevance, groundedness,<br/>faithfulness, hallucination rate,<br/>citation validity]
+        Cases --> Evaluator
+        PromptVersions --> Evaluator
+        Runbooks --> Evaluator
+        Evaluator --> Scores
+    end
 ```
 
 The frontend's synthetic alert generator fills the form with a built-in
 scenario; recorded alert payloads can also be submitted for replay. The
 frontend submits the alert to FastAPI and polls for the final assessment.
+Guardrails validate requests and inspect model-bound free text, and generated
+summaries are checked before verification; flagged input skips model calls and
+rejected summaries fall back to deterministic triage.
+The offline evaluation pipeline uses the versioned scenario set to check
+expected classifications and supporting passages, and compares before/after
+RAG prompts using context relevance, groundedness, faithfulness, hallucination
+rate, and citation validity. It runs separately from the deployed request path;
+the lexical grounding and faithfulness scores are explicitly proxies, not
+human-judged semantic scores.
+These guardrails use local pattern checks and deterministic policy/verification;
+they are not a general-purpose prompt-injection or toxicity classifier.
 Valid requests are processed asynchronously; the API returns a run ID while
 Agent 1 (Incident Investigation Agent) classifies the incident and gathers
 evidence. Agent 2 (Evidence Verification & Routing Agent) verifies the

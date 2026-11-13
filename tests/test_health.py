@@ -136,7 +136,7 @@ def test_ui_page_loads() -> None:
 
     assert response.status_code == 200
     assert "Incident Runbook Triage" in response.text
-    assert "Load a synthetic sample" in response.text
+    assert "Synthetic Alert Generator" in response.text
     assert "No live systems are connected" in response.text
 
 

@@ -429,7 +429,7 @@ _PAGE = """<!doctype html>
   <h1>Incident Runbook Triage</h1>
   <p>Advisory-only triage using synthetic or replayed alerts. No live systems are connected and no remediation is executed.</p>
   <form id="triage-form">
-    <label for="sample-alert">Load a synthetic sample</label>
+    <label for="sample-alert">Synthetic Alert Generator - choose a scenario</label>
     <select id="sample-alert">
       <option value="">Choose a sample alert</option>
       <option value="latency">High database latency</option>
