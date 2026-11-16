@@ -135,11 +135,33 @@ def test_ui_page_loads() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Incident Runbook Triage" in response.text
+    assert "A clearer first response" in response.text
     assert "Synthetic Alert Generator" in response.text
     assert "No live systems are connected" in response.text
-    assert r'"\nFeedback recorded."' in response.text
-    assert r'"\nCould not submit feedback."' in response.text
+    assert 'id="result-card"' in response.text
+    assert "Observed evidence" in response.text
+    assert "Runbook sources" in response.text
+    assert "Technical details and agent trace" in response.text
+    assert "Grafana dashboard" in response.text
+    assert 'href="http://localhost:2027/targets"' in response.text
+    assert "Recorded Locust baseline" in response.text
+    assert "1.212" in response.text
+
+
+def test_agent_metrics_export_latency_without_provider_metrics() -> None:
+    output = main._worker_metrics_text(
+        {
+            "agent:triage:calls": "1",
+            "agent:triage:success": "1",
+            "agent:triage:duration_ms_sum": "1250",
+            "agent:triage:duration_bucket:2.5": "1",
+            "agent:triage:duration_bucket:+Inf": "1",
+        }
+    )
+
+    assert 'incident_triage_agent_duration_seconds_bucket{agent="triage",le="2.5"} 1' in output
+    assert 'incident_triage_agent_duration_seconds_sum{agent="triage"} 1.25' in output
+    assert 'incident_triage_agent_duration_seconds_count{agent="triage"} 1' in output
 
 
 def test_triage_request_requires_non_blank_incident_description() -> None:

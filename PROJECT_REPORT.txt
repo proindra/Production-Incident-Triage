@@ -1,0 +1,501 @@
+PROJECT REPORT
+PostgreSQL Incident Triage Assistant
+
+1. PROJECT OVERVIEW
+
+This project is a locally deployable, advisory incident-triage service for
+selected PostgreSQL operational problems. It accepts a synthetic alert or a
+recorded alert payload together with an on-call note, analyzes the information
+provided, finds relevant operational guidance, applies a deterministic severity
+and routing policy, and returns a recommendation with source references and
+uncertainties.
+
+The project is designed to help an on-call engineer make a faster, more
+consistent first assessment under time pressure. It is not a PostgreSQL
+monitoring product, an automatic root-cause detector, or an automated repair
+system. It does not connect to a live PostgreSQL server or monitoring system.
+Its observations come only from the alert and context submitted by the caller,
+plus deterministic synthetic diagnostic fixtures.
+
+2. PROBLEM STATEMENT
+
+An operational alert usually describes a symptom rather than its cause. For
+example, increasing disk usage does not by itself establish whether the space
+is being consumed by table growth, write-ahead logs (WAL), logs, backups, or
+another process. An on-call engineer must interpret incomplete evidence, find
+the applicable runbook, judge urgency, and decide whether to handle or escalate
+the incident. Doing this while fatigued or under pressure can lead to delays,
+unsupported conclusions, or risky actions.
+
+This project addresses that decision-support problem for three PostgreSQL
+incident categories:
+
+  - High database latency
+  - Too many database connections
+  - Increasing disk usage / possible WAL retention
+
+The particular challenging case is a primary database whose disk usage is
+climbing while table and index sizes are stable. WAL retention is one possible
+explanation, but it must not be presented as confirmed without supporting
+evidence. The service is expected to surface the relevant runbook guidance,
+identify what is and is not known, recommend safe evidence-gathering steps,
+and escalate when support is insufficient.
+
+3. WHAT WE ARE BUILDING
+
+We are building a small production-style service with:
+
+  - A FastAPI HTTP API and a simple browser interface for submitting incidents
+    and viewing results.
+  - An asynchronous request path using Redis and RQ, so submission returns a
+    run identifier instead of waiting for the entire analysis.
+  - A bounded LangGraph investigation and verification workflow.
+  - Three PostgreSQL runbooks and an optional searchable corpus that also
+    includes selected PostgreSQL 17 documentation pages.
+  - A deterministic policy for severity, route selection, and safe actions.
+  - Citation and evidence checks before a recommendation is returned.
+  - SQLite persistence for incident history and user feedback.
+  - Optional FAISS semantic retrieval and optional Groq-powered summaries.
+  - Prometheus metrics, Grafana dashboards, OpenTelemetry traces, and
+    structured application logs for local operational visibility.
+  - Automated tests, fixed evaluation scenarios, and Locust load-test scripts.
+
+The default operating mode is deterministic: model-selected tools and RAG are
+disabled unless explicitly configured. The model path is optional and does not
+control the severity policy, routing, or actions.
+
+4. PROJECT GOALS
+
+  1. Accept an incident description or a typed synthetic alert with an on-call
+     note and structured context.
+  2. Reject malformed, unsupported, or out-of-range data at the API boundary.
+     Rejected requests are quarantined and are not submitted to the worker.
+  3. Separate reported facts from possible causes, recommendations, and
+     missing evidence.
+  4. Retrieve relevant runbook guidance and provide references that can be
+     checked against the source text.
+  5. Assign consistent severity and routing using explicit, deterministic
+     project policy.
+  6. Withhold recommendations that cannot pass verification; use an alternate
+     retrieval attempt or escalate to a human instead.
+  7. Keep advice non-destructive and advisory-only.
+  8. Make the workflow observable and testable, including asynchronous run
+     status, agent/tool activity, metrics, and traces.
+  9. Measure functional behavior, retrieval/summary quality where configured,
+     and end-to-end performance under load.
+
+5. SCOPE AND BOUNDARIES
+
+In scope:
+
+  - Triage of the three supported PostgreSQL categories listed above.
+  - Synthetic scenarios and replay of caller-supplied alert payloads.
+  - Evidence-aware recommendations, runbook references, severity, and route.
+  - Local execution with Docker Compose and optional configuration for RAG and
+    an LLM provider.
+  - Evaluation and monitoring of this triage service.
+
+Out of scope:
+
+  - Connecting to a live PostgreSQL database or live monitoring system.
+  - Collecting real database measurements or executing SQL diagnostics.
+  - Automatically changing database configuration or performing repair.
+  - Training a new machine-learning model.
+  - Production cloud deployment, shared production storage, or a full
+    enterprise authentication and authorization system.
+  - Claiming a confirmed root cause when the supplied evidence does not support
+    it.
+
+The service is advisory. It must not delete WAL, drop replication slots,
+terminate sessions, restart PostgreSQL, or apply configuration changes. A
+human operator remains responsible for investigating and approving any action.
+
+6. USERS AND TYPICAL USE
+
+Primary user:
+  An on-call engineer or developer who needs an initial assessment of a
+  PostgreSQL alert.
+
+Typical flow:
+  1. The user submits a description or alert payload and optional context.
+  2. The API validates the request and applies per-client rate limiting.
+  3. The API places a valid request on the Redis queue and returns a run ID.
+  4. The user polls the run-status endpoint.
+  5. A worker classifies the incident, gathers permitted evidence, searches
+     guidance, and prepares a candidate response.
+  6. A separate verification stage checks the result and citations.
+  7. The completed result, or a human escalation when verification fails, is
+     displayed and persisted.
+  8. The caller may submit satisfaction feedback with a reason when
+     dissatisfied.
+
+7. ARCHITECTURE AND DEPLOYMENT BOUNDARIES
+
+The application separates HTTP handling, domain policy, orchestration, and
+infrastructure:
+
+  - app/api: FastAPI endpoints and the browser UI.
+  - app/domain: request/response types, triage policy, runbook contracts, and
+    safety helpers.
+  - app/services: triage and agent workflow coordination.
+  - app/infrastructure: Redis/RQ, SQLite, diagnostic fixtures, model adapters,
+    and RAG adapters.
+  - app/core: configuration and observability.
+
+High-level request flow:
+
+  Browser or recorded alert
+          |
+          v
+  FastAPI validation, rate limit, correlation ID
+          |
+          +-- invalid --> field errors and quarantine ID; no queued run
+          |
+          v
+  Redis / RQ queue --> triage worker
+                           |
+                           v
+                    Investigation agent
+                     |      |       |
+                     |      |       +--> clause lookup
+                     |      +----------> runbook search
+                     +-----------------> request-field lookup
+                           |
+                           v
+                 deterministic policy and evidence
+                           |
+                           v
+                    Verification agent
+                       |          |
+             verified |          | not verified
+                       v          v
+              result with sources  one alternate retrieval
+                                    then escalation if needed
+                           |
+                           v
+                  SQLite history / run status
+                           |
+                           v
+                     Browser / caller
+
+Observability runs alongside the application:
+
+  API, workers, Redis exporter, and cAdvisor
+                --> Prometheus --> Grafana
+  API and workers --> OpenTelemetry --> Jaeger
+  Application components --> structured logs to container output
+
+Docker Compose keeps the API, worker, Redis queue, and monitoring services in
+separate containers. This allows the worker count to be scaled independently
+from the API. SQLite and the optional index/model cache are stored on a shared
+local data volume in the Compose configuration. The included monitoring stack
+observes the triage service and its containers; it does not monitor a live
+PostgreSQL target.
+
+8. AGENT DESIGN AND LIMITS
+
+The LangGraph workflow has two distinct responsibilities:
+
+Investigation agent:
+  - Interprets the supplied request and context.
+  - Uses bounded tools to look up request fields and search the runbook corpus.
+  - Can look up a particular runbook clause when further evidence is needed.
+  - Produces a proposed assessment with evidence, hypotheses, and references.
+
+Verification agent:
+  - Receives the draft assessment and its retrieved references.
+  - Checks the proposed recommendation and citations against the retrieved
+    source text and supported incident category.
+  - Can trigger one alternate retrieval attempt if verification fails.
+  - Escalates rather than returning an unsupported recommendation if the
+    second verification also fails.
+
+Available tools:
+  - lookup_request_fields: reads validated request fields and context.
+  - search_corpus: searches runbook content using keyword retrieval by default
+    or FAISS semantic retrieval when RAG is enabled.
+  - lookup_clause_by_id: retrieves a runbook clause by filename and heading.
+
+The graph has explicit bounds: up to four tool-selection rounds, eight tool
+calls, at most one alternate retrieval for verification, and a 120-second RQ
+job timeout. These limits prevent an unbounded investigation loop.
+
+The agents propose and verify. The deterministic policy remains authoritative
+for severity, routing, and recommended actions. Optional model-selected tool
+use cannot perform remediation or override that policy.
+
+9. INPUT CONTRACT, EVIDENCE, AND SAFETY
+
+The API accepts either a non-empty incident description or a structured alert.
+The structured alert includes an incident type, optional database name,
+environment, PostgreSQL version, and metrics. The contract rejects unknown
+fields, validates supported categories and value ranges, and checks selected
+cross-field requirements. For example, current connection count requires a
+maximum connection count. Percentages are bounded to 0 through 100.
+
+Malformed input returns field-level validation errors and a quarantine ID
+before queue submission. Requests exceeding the configured rate limit are
+rejected. If Redis is unavailable, the API reports that the request could not
+be queued; it does not shape that failure as a successful run.
+
+Result fields distinguish:
+  - evidence_observed: facts contained in the request or returned by a check
+    that actually ran.
+  - hypotheses: possible explanations that are not established facts.
+  - checks_performed: checks that actually ran.
+  - checks_recommended: checks suggested for the human operator to perform.
+  - uncertainties: missing or conflicting evidence affecting the assessment.
+
+The default diagnostic implementation uses deterministic fixtures. It does
+not perform live database checks. User-supplied context is reported evidence,
+not proof that the service independently measured a condition.
+
+Local pattern-based safety checks inspect model-bound free text for selected
+prompt-injection and abusive patterns, redact certain secret formats, and
+inspect generated summaries for selected unsafe content, unsupported cause
+claims, excessive length, or invalid citations. These checks are intentionally
+limited patterns and are not a general-purpose prompt-injection, toxicity, or
+secret-detection system.
+
+10. SEVERITY AND ROUTING
+
+Severity levels are low, medium, high, and critical. The implemented policy
+uses project thresholds and supplied evidence. Examples include:
+
+  - Disk usage at or above 95 percent, or free disk at or below 5 percent:
+    critical.
+  - Disk usage at or above 90 percent, or free disk at or below 10 percent:
+    high.
+  - Connection use at or above 95 percent of the supplied maximum: high.
+  - Observed latency at or above three times the supplied threshold: high.
+  - An unknown category defaults to low; otherwise the baseline is generally
+    medium unless a stronger rule applies.
+  - Explicit unavailability/outage wording is treated as critical; failing
+    requests or inability to connect is treated as high.
+
+Routes are self-serve runbook, page-secondary, and incident-commander. The
+route is selected from the policy and assessment; the response includes the
+routing basis. Teams should replace the example thresholds and routing rules
+with their approved incident policy before relying on them operationally.
+
+11. RETRIEVAL AND OPTIONAL GENERATION
+
+Default retrieval:
+  Keyword search across the three project runbooks. The default triage path
+  works without RAG or external model calls.
+
+Optional RAG:
+  - Corpus: the three project runbooks and three selected PostgreSQL 17
+    documentation pages (monitoring statistics, WAL runtime configuration,
+    and warm standby).
+  - Chunking: heading-aware Markdown chunks of approximately 1,200 characters.
+  - Embeddings: Sentence Transformers, with
+    sentence-transformers/all-MiniLM-L6-v2 as the default model.
+  - Vector index: persistent FAISS using normalized vectors for cosine
+    similarity.
+  - Updates: unchanged passages keep their embeddings; changed/new passages
+    are re-embedded, deleted passages are removed, and changing the embedding
+    model requires rebuilding vectors.
+  - Generation: optional Groq-compatible model produces a short summary from
+    retrieved passages. The citations are checked against the source text.
+
+RAG generation is not required for deterministic triage. If generation is
+unavailable or its output fails checks, deterministic triage remains the
+fallback. Enabling an external provider sends the configured incident
+description, redacted context, and retrieved excerpts to that provider.
+Provider use must be approved for the data being processed. Embeddings and the
+FAISS index are local; provider generation may incur charges.
+
+12. API AND PERSISTENCE
+
+Main endpoints:
+  - GET /health: API liveness.
+  - GET /ready: checks Redis queue readiness.
+  - POST /incidents/triage: validates and queues a request; returns HTTP 202
+    and a run ID/status URL.
+  - GET /incidents/runs/{run_id}: returns queued, finished, or failed status
+    and the result when available.
+  - GET /metrics: Prometheus metrics for API/worker activity and index state.
+  - POST /incidents/{incident_id}/feedback: records feedback; negative
+    feedback requires a reason.
+  - GET /incidents/feedback/summary: returns aggregated feedback totals.
+  - GET /: simple browser interface.
+
+Redis/RQ stores queue and run-status data. SQLite stores incident history and
+feedback locally. The SQLite database is suitable for the local demo, not
+shared production use. Correlation IDs and trace context are propagated from
+the API to the worker.
+
+13. OBSERVABILITY AND OPERATIONS
+
+The local Compose environment includes:
+  - FastAPI and one or more RQ workers.
+  - Redis for queueing and shared runtime state.
+  - A deterministic OpenAI-compatible model stub for testing.
+  - Prometheus for scraping metrics.
+  - Grafana for dashboards.
+  - Jaeger for OpenTelemetry traces.
+  - Redis Exporter and cAdvisor for queue/container metrics.
+
+Application metrics cover API behavior and worker/agent activity, including
+run success, steps/tool calls, verification retries, and per-step timing.
+Grafana is provisioned with the Prometheus data source and the checked-in
+service dashboard. The dashboard covers API p50/p95, throughput, errors,
+scrape availability, per-agent success and latency, verification retries,
+steps/tool calls, and container CPU, memory, and uptime. The web interface
+provides direct links to Grafana, Prometheus targets, Jaeger, and raw metrics,
+along with a clearly labeled snapshot of recorded Locust results.
+Worker/per-agent metrics are Redis-backed and exported by the API; container
+resource metrics come from cAdvisor.
+Locust's completion event measures submit-to-final-result time, including
+queue wait; API request latency by itself is not the end-to-end service
+measurement. Logs are structured JSON written to container output and can be
+viewed with Docker Compose logs. The supplied setup does not include a
+centralized log backend.
+
+The local API and Prometheus setup has no authentication configured. It is
+intended for local development and must not be exposed to untrusted networks.
+
+14. EVALUATION AND REPORTED RESULTS
+
+Functional evaluation:
+  - A fixed suite of 20 deterministic scenarios covers supported and
+    unsupported incidents, severity boundaries, missing/conflicting evidence,
+    destructive requests, and the disk/WAL-retention case.
+  - Expected category/severity outcomes and expected source/heading
+    references are recorded in evaluation/scenarios.json.
+  - Tests cover API validation, quarantine, policies, safety, queue behavior,
+    retrieval, citation verification, persistence, observability, and related
+    service behavior.
+
+Declared performance objective:
+  p95 submit-to-final-result latency at or below 30 seconds.
+
+Reported Locust measurements (RAG disabled, one-second configured worker
+delay, 60-second run):
+
+  Workers  Users  Completed runs  Throughput  p50      p95      Failures
+  1        10     25              0.423 RPS   23.0 s   23.0 s   0
+  3        10     72              1.212 RPS    7.9 s    8.9 s   0
+  1        15     24              0.411 RPS   28.0 s   36.0 s   0
+
+The target was met at 10 users for both worker configurations and exceeded at
+15 users with one worker. At 10 users, three workers delivered about 2.9 times
+the throughput and reduced p95 by about 61 percent. Queue wait and serialized
+worker execution were identified as the bottleneck in the one-worker case.
+These measurements represent the deterministic workflow and configured
+worker delay, not actual Groq latency or provider rate limits.
+
+Retrieval/cache benchmark reported in the evaluation documentation:
+  - Cold/warm retrieval p95: 0.795 ms / 0.0068 ms.
+  - Deterministic triage p95: 9.48 ms / 6.77 ms.
+  - Reported reduction in the triage computation component: 28.6 percent.
+This microbenchmark excludes queue wait and simulated delay; it must not be
+interpreted as the same reduction in end-to-end latency.
+
+Cost:
+  - The default deterministic workflow makes no model calls; the documented
+    cost is $0 per 100 deterministic runs.
+  - An actual provider-backed cost depends on model usage and configured
+    token prices. No provider-backed cost or RAG prompt-comparison scores are
+    claimed here; those require running the optional evaluation with a
+    configured model and index.
+  - The prompt evaluator compares two prompt versions against the same cases
+    and reports retrieval relevance, lexical groundedness/faithfulness
+    proxies, hallucination proxy, and citation validity. Those lexical scores
+    are not semantic judgments or human-reviewed quality scores.
+
+15. DESIGN DECISIONS
+
+  - Asynchronous API with Redis/RQ:
+    Chosen so an HTTP request remains responsive while a run performs bounded
+    retrieval and verification. The user polls for completion.
+  - Deterministic policy:
+    Chosen so severity, routing, and allowed actions remain predictable and
+    are not controlled by generated text.
+  - Separate investigation and verification responsibilities:
+    Chosen to make source checking explicit and to permit escalation instead
+    of always returning an answer.
+  - Keyword search as the default:
+    Chosen to keep the default system usable without embeddings, index
+    construction, provider credentials, or model calls.
+  - Optional FAISS and provider generation:
+    Chosen to enable semantic retrieval and grounded summaries without making
+    external model calls a dependency of core triage.
+  - SQLite for local history:
+    Chosen as a lightweight persistence option for the demo. It is not a
+    production shared database.
+  - Bounded retries and loops:
+    Chosen to limit runtime, provider usage, and runaway agent behavior.
+  - Advisory-only output:
+    Chosen to keep operational decisions and potentially destructive changes
+    under human control.
+
+The system does not use a fixed, mandatory LLM-answering pipeline: a single
+model response is not trusted as the final source of policy or truth. It also
+does not use a live diagnostic adapter or automatic remediation path because
+live-system access and automatic changes are outside the project's scope.
+
+16. LIMITATIONS AND WHAT DID NOT WORK / REMAINS UNPROVEN
+
+  - The service does not collect live metrics or establish real root cause.
+    Analysis quality depends on the accuracy and completeness of submitted
+    alert data and configured fixtures.
+  - The severity policy is a project default, not a universal or organization-
+    approved incident policy.
+  - The local regex/pattern safety checks cover selected known strings only;
+    they cannot guarantee detection of all prompt injection, abusive content,
+    secrets, or unsafe advice.
+  - Optional LLM/RAG behavior has distinct external-provider requirements,
+    latency, cost, data-handling implications, and model failure modes.
+  - The reported load measurements do not measure Groq-enabled performance.
+    A separate provider or realistic stub run is needed before making an SLO
+    claim for that configuration.
+  - Lexical RAG evaluation metrics are proxies and do not replace expert
+    semantic review or a human-judged answer-quality evaluation.
+  - The included unauthenticated local API, local SQLite history, and local
+    Grafana credentials are for development; shared/production deployment
+    requires suitable authentication, authorization, secret management,
+    durable/shared storage, and network protections.
+  - Cost for optional provider-backed runs is not fixed and is not represented
+    by the deterministic $0 baseline.
+
+17. RUNNING THE PROJECT
+
+Requirements: Git, Docker, and Docker Compose.
+
+From the repository directory:
+
+  docker compose up --build
+
+Open the browser interface at:
+
+  http://127.0.0.1:8000/
+
+Open the API documentation at:
+
+  http://127.0.0.1:8000/docs
+
+Local monitoring interfaces:
+
+  Prometheus: http://localhost:2027
+  Grafana:    http://localhost:2028
+  Jaeger:     http://localhost:2030
+
+To scale the worker service to three replicas:
+
+  docker compose up --build --scale agent-worker=3
+
+The default setup needs no Groq key and does not enable RAG. Optional RAG
+requires configuring the environment, fetching/indexing the selected corpus,
+and starting workers with RAG enabled. Consult README.md and docs/evaluation.md
+for complete configuration, ingestion, evaluation, and load-test commands.
+
+18. SUMMARY
+
+The project builds an observable, asynchronous, advisory PostgreSQL incident
+triage service. Its core value is not merely classifying an alert: it organizes
+the supplied evidence, locates applicable operational guidance, applies
+consistent severity and routing rules, verifies citations, exposes
+uncertainty, and escalates when evidence is insufficient. The design keeps
+LLM generation optional and keeps remediation decisions with a human operator.

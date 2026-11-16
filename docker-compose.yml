@@ -187,6 +187,8 @@ services:
       - "2028:3000"
     volumes:
       - irt-grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:
       - irt-prometheus
     networks:

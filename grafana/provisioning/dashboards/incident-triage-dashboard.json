@@ -1,14 +1,5 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "Prometheus data source for the incident monitoring stack",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
+  "uid": "incident-triage-overview",
   "annotations": {
     "list": []
   },
@@ -17,7 +8,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -41,7 +32,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -65,7 +56,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -89,7 +80,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -113,7 +104,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -137,7 +128,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -161,7 +152,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -185,7 +176,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -209,7 +200,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -233,7 +224,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -257,7 +248,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -281,7 +272,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -305,7 +296,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -329,7 +320,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,
@@ -353,7 +344,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -384,7 +375,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "incident-triage-prometheus"
       },
       "gridPos": {
         "h": 8,

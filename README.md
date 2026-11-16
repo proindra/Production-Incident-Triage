@@ -574,14 +574,25 @@ docker compose ps
 ```
 
 Check <http://localhost:2027/targets> for the configured local scrape targets.
-Traces are available in Jaeger at <http://localhost:2030>. In Grafana, add a
-Prometheus data source with URL `http://irt-prometheus:9090` (Grafana must use
-the container-network URL, not `localhost:2027`).
-The checked-in dashboard at
-[`grafana/incident-triage-dashboard.json`](grafana/incident-triage-dashboard.json)
-contains triage API, worker, queue, and local container metrics only. Import it
-from Grafana's dashboard UI and select the `Incident Triage Prometheus` data
-source. It does not display PostgreSQL target metrics.
+Traces are available in Jaeger at <http://localhost:2030>. Grafana is
+provisioned automatically with a dedicated Prometheus data source and the checked-in
+dashboard; open the
+[Incident Triage dashboard](http://localhost:2028/d/incident-triage-overview/incident-triage-service-overview)
+after Compose starts. Its JSON is at
+[`grafana/provisioning/dashboards/incident-triage-dashboard.json`](grafana/provisioning/dashboards/incident-triage-dashboard.json).
+It includes API p50/p95, throughput, errors, scrape
+availability, per-agent success and latency, verification retries, worker
+steps/tool calls, and container CPU, memory, and uptime. Worker and per-agent
+metrics are backed by Redis and exported through the API `/metrics` endpoint;
+the worker does not expose a separate Prometheus endpoint. cAdvisor supplies
+container metrics. These are service metrics only; PostgreSQL target metrics
+are not collected.
+
+The Locust results in [docs/evaluation.md](docs/evaluation.md) and
+`results/` are recorded load-test measurements, not live Grafana values.
+Locust's `complete triage run` event measures submission through final result,
+including queue wait. The dashboard's worker histogram measures worker
+execution and should not be presented as end-to-end latency.
 
 ## Safety and limitations
 

@@ -1,0 +1,11 @@
+apiVersion: 1
+
+datasources:
+  - name: Incident Triage Prometheus (provisioned)
+    type: prometheus
+    orgId: 1
+    uid: incident-triage-prometheus
+    access: proxy
+    url: http://irt-prometheus:9090
+    isDefault: false
+    editable: true
