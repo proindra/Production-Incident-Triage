@@ -453,8 +453,9 @@ overwritten. The default Groq model is `openai/gpt-oss-120b`. Change
 `GROQ_MODEL` to use another supported Groq model. The default embedding model is
 `sentence-transformers/all-MiniLM-L6-v2`; change `RAG_EMBEDDING_MODEL` to use
 another Sentence Transformers-compatible model. The key and any private model
-configuration must not be committed. Compose passes the Groq key to worker
-containers only.
+configuration must not be committed. `GROQ_BASE_URL` defaults to the official
+Groq API endpoint; set it only when using a custom compatible endpoint. Compose
+passes the Groq key to worker containers only.
 
 Build the local FAISS index before starting RAG workers:
 

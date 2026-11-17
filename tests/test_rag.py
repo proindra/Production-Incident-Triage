@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 from langchain_core.messages import AIMessage
@@ -168,7 +170,7 @@ def test_groq_summary_requires_a_citation_from_retrieved_passages() -> None:
 
     result = generator.generate("Disk is growing", {}, [reference])
 
-    assert result.prompt_version == "grounded-summary-v2"
+    assert result.prompt_version == "grounded-summary-v3"
     assert result.prompt_tokens == 23
     assert result.completion_tokens == 11
     assert "[disk.md#Storage]" in result.summary
@@ -213,6 +215,7 @@ def test_groq_prompt_redacts_secrets_before_provider_call() -> None:
     sent_prompt = model.messages[1].content
     assert "actual-secret" not in sent_prompt
     assert "sensitive-token" not in sent_prompt
+    assert json.loads(sent_prompt)["allowed_citations"] == ["disk.md#Storage"]
 
 
 def test_rag_enabled_requires_runtime_groq_configuration(monkeypatch) -> None:

@@ -81,6 +81,7 @@ class GroqSummaryGenerator:
                     :10_000
                 ],
                 "passages": passages,
+                "allowed_citations": [_citation_id(reference) for reference in references],
             },
             ensure_ascii=True,
         )

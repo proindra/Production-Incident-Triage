@@ -920,7 +920,9 @@ _PAGE = """<!doctype html>
         const summary = makeElement("section", "result-block wide");
         summary.append(makeElement("h3", "", "Grounded summary"));
         summary.append(makeElement("p", "empty-note", result.rag_summary));
-        body.append(makeElement("div", "result-grid")).append(summary);
+        const summaryGrid = makeElement("div", "result-grid");
+        summaryGrid.append(summary);
+        body.append(summaryGrid);
       }
       const grid = makeElement("div", "result-grid");
       grid.append(makeBlock("Observed evidence", result.evidence_observed, "No evidence was supplied or collected."));

@@ -53,7 +53,7 @@ class RunbookRAG:
             model=groq_model,
             base_url=settings.groq_base_url,
             temperature=0,
-            max_tokens=300,
+            max_tokens=1024,
             timeout=settings.timeout_seconds,
             max_retries=0,
         )
