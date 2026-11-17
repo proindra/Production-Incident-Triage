@@ -580,12 +580,11 @@ dashboard; open the
 [Incident Triage dashboard](http://localhost:2028/d/incident-triage-overview/incident-triage-service-overview)
 after Compose starts. Its JSON is at
 [`grafana/provisioning/dashboards/incident-triage-dashboard.json`](grafana/provisioning/dashboards/incident-triage-dashboard.json).
-It includes API p50/p95, throughput, errors, scrape
-availability, per-agent success and latency, verification retries, worker
-steps/tool calls, and container CPU, memory, and uptime. Worker and per-agent
-metrics are backed by Redis and exported through the API `/metrics` endpoint;
-the worker does not expose a separate Prometheus endpoint. cAdvisor supplies
-container metrics. These are service metrics only; PostgreSQL target metrics
+It keeps the main charts simple: API requests per minute, average API response
+time, completed triage runs split by result, and the number of monitored
+services currently online. Worker metrics are backed by Redis and exported
+through the API `/metrics` endpoint; the worker does not expose a separate
+Prometheus endpoint. These are service metrics only; PostgreSQL target metrics
 are not collected.
 
 The Locust results in [docs/evaluation.md](docs/evaluation.md) and

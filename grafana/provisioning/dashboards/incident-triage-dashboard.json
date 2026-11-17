@@ -10,23 +10,31 @@
         "type": "prometheus",
         "uid": "incident-triage-prometheus"
       },
+      "description": "How many requests the API handles each minute, averaged over 5 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
         "y": 0
       },
-      "id": 4,
+      "id": 1,
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(incident_triage_http_request_duration_seconds_bucket{route!=\"/metrics\"}[5m])))",
-          "legendFormat": "p95",
+          "expr": "sum(rate(incident_triage_http_requests_total{route!=\"/metrics\"}[5m])) * 60",
+          "legendFormat": "requests/min",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "API request p95 latency",
+      "title": "API requests per minute",
       "type": "timeseries"
     },
     {
@@ -34,318 +42,7 @@
         "type": "prometheus",
         "uid": "incident-triage-prometheus"
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 5,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rate(incident_triage_http_requests_total{route!=\"/metrics\"}[5m]))",
-          "legendFormat": "requests/s",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "API throughput",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 6,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(incident_triage_worker_run_duration_seconds_bucket[5m])))",
-          "legendFormat": "worker p95",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Worker execution p95",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 7,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (status) (incident_triage_worker_runs_total)",
-          "legendFormat": "{{status}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Worker run outcomes",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 8,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(incident_triage_http_request_duration_seconds_bucket{route!=\"/metrics\"}[5m])))",
-          "legendFormat": "p50",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "API request p50 latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
-      },
-      "id": 9,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rate(incident_triage_http_requests_total{status=~\"5..\",route!=\"/metrics\"}[5m])) / clamp_min(sum(rate(incident_triage_http_requests_total{route!=\"/metrics\"}[5m])), 1e-9)",
-          "legendFormat": "5xx fraction",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "API error rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 24
-      },
-      "id": 10,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "min_over_time(up[5m])",
-          "legendFormat": "{{job}} {{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Scrape availability by service",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 24
-      },
-      "id": 11,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, agent) (rate(incident_triage_agent_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{agent}} p95",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Per-agent step p95 latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 12,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (agent) (rate(incident_triage_agent_success_total[5m])) / clamp_min(sum by (agent) (rate(incident_triage_agent_calls_total[5m])), 1e-9)",
-          "legendFormat": "{{agent}} success fraction",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Per-agent success rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 13,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(rate(incident_triage_retrieval_retries_total[5m]))",
-          "legendFormat": "alternate searches/s",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Verification retry rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      },
-      "id": 14,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Container CPU utilization",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      },
-      "id": 15,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (container_label_com_docker_compose_service) (container_memory_usage_bytes{name!=\"\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Container memory utilization",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 48
-      },
-      "id": 16,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "100 * rate(incident_triage_model_cost_usd_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
-          "legendFormat": "cost per 100 successful runs",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Estimated model cost per 100 runs",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 48
-      },
-      "id": 17,
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "incident_triage_index_chunks",
-          "legendFormat": "indexed chunks",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Indexed corpus size",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "incident-triage-prometheus"
-      },
+      "description": "How long the API takes to respond, on average.",
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -356,20 +53,20 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 56
+        "x": 12,
+        "y": 0
       },
-      "id": 18,
+      "id": 2,
       "targets": [
         {
           "editorMode": "code",
-          "expr": "time() - container_start_time_seconds{name!=\"\"}",
-          "legendFormat": "{{name}}",
+          "expr": "sum(rate(incident_triage_http_request_duration_seconds_sum{route!=\"/metrics\"}[5m])) / clamp_min(sum(rate(incident_triage_http_request_duration_seconds_count{route!=\"/metrics\"}[5m])), 1e-9)",
+          "legendFormat": "average",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container uptime",
+      "title": "Average API response time",
       "type": "timeseries"
     },
     {
@@ -377,36 +74,86 @@
         "type": "prometheus",
         "uid": "incident-triage-prometheus"
       },
+      "description": "Total triage runs, split into successful and failed runs.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (status) (incident_triage_worker_runs_total)",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Triage runs completed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "incident-triage-prometheus"
+      },
+      "description": "Number of monitored services Prometheus can reach right now.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 8
       },
-      "id": 19,
+      "id": 4,
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(incident_triage_agent_steps_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
-          "legendFormat": "steps per successful run",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "editorMode": "code",
-          "expr": "rate(incident_triage_tool_calls_total[5m]) / clamp_min(rate(incident_triage_worker_runs_total{status=\"success\"}[5m]), 1e-9)",
-          "legendFormat": "tool calls per successful run",
-          "range": true,
-          "refId": "B"
+          "expr": "sum(up)",
+          "legendFormat": "online",
+          "range": false,
+          "refId": "A",
+          "instant": true
         }
       ],
-      "title": "Average steps and tool calls per successful run",
-      "type": "timeseries"
+      "title": "Services online",
+      "type": "stat",
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["incident-triage"],
+  "tags": [
+    "incident-triage"
+  ],
   "templating": {
     "list": []
   },
@@ -415,6 +162,6 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Incident Triage - Service Overview",
-  "version": 1
+  "title": "Incident Triage - Simple Overview",
+  "version": 2
 }
